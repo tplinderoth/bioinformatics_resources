@@ -943,8 +943,10 @@ printf "\nfinished\n"
 
 --- end bash code ---
 
-note: tabix option -C (for generating a csi index) is only needed if scaffolds are very long. Otherwise, the default tbi index is okay.
-
+notes:
+- tabix option -C (for generating a csi index) is only needed if scaffolds are very long. Otherwise, the default tbi index is okay.
+- Currently the VCF annotation descriptions (written to the VCF header) need to be manually written/modified in the annotate_vcf.pl script. Future versions of this script 
+  will take an input file of custom annotation descriptions.
 
 Log annotation report information
 
