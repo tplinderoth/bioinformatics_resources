@@ -245,7 +245,7 @@ eval $CMD
 #
 
 
-## ---------- MAP FASTQ TO REFERENCE GENOME ---------- ##
+## ---------- MAP READS TO REFERENCE GENOME ---------- ##
 
 ## (2a) Index the reference genome for mapping and use with utilities like samtools.
 
