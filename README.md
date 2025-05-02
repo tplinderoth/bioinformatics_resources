@@ -1,7 +1,7 @@
-A collection of resources and workflows for bioinformatic analayses
+A collection of resources and workflows for bioinformatic analyses
 ============================================================================================
 
 ### Resource categories
 
-Genetic variant identification
+[Genetic variant calling](./variant_calling)
 <br>
