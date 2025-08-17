@@ -60,9 +60,10 @@ REF='/mnt/research/Fitz_Lab/ref/frog/atelopus_ignescens/AteIgnes.fasta'
 IDLIST='/mnt/research/Fitz_Lab/projects/atelopus/atelopus_wgs/metadata/atelopus_wgs_specimen_id.txt'
 FQDIR='/mnt/gs21/scratch/lindero1/atelopus/wgs/resplit'
 OUTDIR='/mnt/gs21/scratch/lindero1/atelopus/wgs/untrimmed_bam'
+SEQPLATFORM='ILLUMINA'
 SAMPID=$(sed -n "${SLURM_ARRAY_TASK_ID}p" "$IDLIST")
 NTHREAD=10
 
-CMD="$EXEC $REF $SAMPID $FQDIR $OUTDIR 'Atelopus toad whole genome sequencing data produced by the Michigan State University RTSF Genomics Core, project JAY14502 KEJ_Atelopus_WG_RR_2023' $NTHREAD"
+CMD="$EXEC $REF $SAMPID $FQDIR $OUTDIR $SEQPLATFORM 'Atelopus toad whole genome sequencing data produced by the Michigan State University RTSF Genomics Core, project JAY14502 KEJ_Atelopus_WG_RR_2023' $NTHREAD"
 printf "\n%s\n" "$CMD"
 eval $CMD

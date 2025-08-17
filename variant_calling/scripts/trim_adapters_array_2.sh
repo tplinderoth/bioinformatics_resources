@@ -2,14 +2,14 @@
 #! This line is a comment
 #! Make sure you only have comments and #SBATCH directives between here and the end of the #SBATCH directives, or things will break
 #! Name of the job:
-#SBATCH -J trim_adapters_atelopus
+#SBATCH -J trim_adapters_atelopus_aviti1
 #! Account name for group, use SL2 for paying queue:
-#SBATCH -A general
+#SBATCH -A bioinformaticscore
 #! Output filename:
 #! %A means slurm job ID and %a means array index
-#SBATCH --output=trim_adapters_atelopus_%A_%a.out
+#SBATCH --output=trim_adapters_atelopus_aviti1_%A_%a.out
 #! Errors filename:
-#SBATCH --error=trim_adapters_atelopus_%A_%a.err
+#SBATCH --error=trim_adapters_atelopus_aviti1_%A_%a.err
 
 #! Number of nodes to be allocated for the job (for single core jobs always leave this at 1)
 #SBATCH --nodes=1
@@ -23,7 +23,7 @@
 #SBATCH --mem=24000mb
 #! Submit a job array with index values between 0 and 31
 #! NOTE: This must be a range, not a single number
-#SBATCH --array=1-21
+#SBATCH --array=2-22
 
 #! This is the partition name.
 #! #SBATCH -p cclake
@@ -56,18 +56,35 @@ workdir="$SLURM_SUBMIT_DIR" # The value of SLURM_SUBMIT_DIR sets workdir to the 
 cd $workdir
 
 EXEC='cutadapt'
-INDLIST='/mnt/research/Fitz_Lab/projects/atelopus/atelopus_wgs/metadata/atelopus_wgs_seqid.txt'
+EXEC2='/mnt/research/Fitz_Lab/projects/atelopus/atelopus_wgs/clean_data/scripts/batch2_aviti/rescueUnpaired.pl'
+METADATA='/mnt/research/Fitz_Lab/projects/atelopus/atelopus_wgs/metadata/atelopus_wgs_metadata.tsv'
 FQDIR='/mnt/gs21/scratch/lindero1/atelopus/wgs/deduplicate_fastq'
-FQPREFIX=$(sed -n "${SLURM_ARRAY_TASK_ID}p" "$INDLIST")
-FQFWD="${FQDIR}/${FQPREFIX}_R1.fastq.gz"
-FQREV="${FQDIR}/${FQPREFIX}_R2.fastq.gz"
+FQPREFIX=$(sed -n "${SLURM_ARRAY_TASK_ID}p" "$METADATA" | cut -f2,4 | sed "s/[[:space:]]/_/")
+BATCH='aviti1'
+FQFWD="${FQDIR}/${FQPREFIX}_${BATCH}_R1.fastq.gz"
+FQREV="${FQDIR}/${FQPREFIX}_${BATCH}_R2.fastq.gz"
 OUTDIR='/mnt/gs21/scratch/lindero1/atelopus/wgs/trim_adapters'
-OUTFWD="${OUTDIR}/${FQPREFIX}_dedup_trim_R1.fastq.gz"
-OUTREV="${OUTDIR}/${FQPREFIX}_dedup_trim_R2.fastq.gz"
-LOGFILE="/mnt/research/Fitz_Lab/projects/atelopus/atelopus_wgs/clean_data/trim_adapters/stats/${FQPREFIX}.cutadapt.json"
+OUTFWD="${OUTDIR}/${FQPREFIX}_${BATCH}_qcpass_R1.fastq.gz"
+OUTREV="${OUTDIR}/${FQPREFIX}_${BATCH}_qcpass_R2.fastq.gz"
+SHORTR1="${OUTDIR}/${FQPREFIX}_${BATCH}_short_R1.fastq.gz"
+SHORTR2="${OUTDIR}/${FQPREFIX}_${BATCH}_short_R2.fastq.gz"
+OUTUNPAIR="${OUTDIR}/${FQPREFIX}_${BATCH}_qcpass_U.fastq.gz"
+LOGFILE="/mnt/research/Fitz_Lab/projects/atelopus/atelopus_wgs/clean_data/trim_adapters/stats/${FQPREFIX}_${BATCH}.cutadapt.json"
 
-CMD="$EXEC -a AGATCGGAAGAGCACACGTCTGAACTCCAGTCA -A AGATCGGAAGAGCGTCGTGTAGGGAAAGAGTGT --overlap 3 --trim-n --minimum-length 70 -o $OUTFWD -p $OUTREV --json $LOGFILE --discard-casava $FQFWD $FQREV"
+CMD="$EXEC -a AGATCGGAAGAGCACACGTCTGAACTCCAGTCA -A AGATCGGAAGAGCGTCGTGTAGGGAAAGAGTGT --overlap 3 --trim-n --minimum-length 70 -o $OUTFWD -p $OUTREV \
+--too-short-output $SHORTR1 --too-short-paired-output $SHORTR2 --json $LOGFILE --discard-casava $FQFWD $FQREV"
 
 printf "\n%s\n\n" "$CMD"
 
 eval $CMD
+
+wait
+
+CMD2="$EXEC2 --fq1 $SHORTR1 --fq2 $SHORTR2 --outname $OUTUNPAIR --minlen 70"
+printf "\n%s\n\n" "$CMD2"
+eval $CMD2
+
+wait
+
+rm $SHORTR1
+rm $SHORTR2

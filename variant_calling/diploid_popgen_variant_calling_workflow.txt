@@ -91,6 +91,9 @@ $ for i in {1..21}; do LIB="kjawg${i}"; LIBU=$(echo "$LIB" | perl -ne 'print uc(
 Make sure you use the correct adapter sequences. The sequences below are for Illumina TruSeq libraries. These sequences are also used 
 for AVITI libraries prepared by the MSU RTSF.
 
+If data were produced on a 2-color sequencing platform and poly-G trimming is needed (step 1e), use the following script/code to trim adapters.
+Note that --discard-casava can optionally be evoked to remove reads that fail casava filters.
+
 $ sbatch /mnt/research/Fitz_Lab/projects/atelopus/atelopus_wgs/clean_data/scripts/trim_adapters_array.sh
 implements:
 
@@ -105,8 +108,9 @@ FQREV="${FQDIR}/${FQPREFIX}_R2.fastq.gz"
 OUTDIR='/mnt/gs21/scratch/lindero1/atelopus/wgs/trim_adapters'
 OUTFWD="${OUTDIR}/${FQPREFIX}_dedup_trim_R1.fastq.gz"
 OUTREV="${OUTDIR}/${FQPREFIX}_dedup_trim_R2.fastq.gz"
+LOGFILE="/mnt/research/Fitz_Lab/projects/atelopus/atelopus_wgs/clean_data/trim_adapters/stats/${FQPREFIX}.cutadapt.json"
 
-CMD="$EXEC -a AGATCGGAAGAGCACACGTCTGAACTCCAGTCA -A AGATCGGAAGAGCGTCGTGTAGGGAAAGAGTGT --overlap 3 --trim-n --minimum-length 70 -o $OUTFWD -p $OUTREV $FQFWD $FQREV"
+CMD="$EXEC -a AGATCGGAAGAGCACACGTCTGAACTCCAGTCA -A AGATCGGAAGAGCGTCGTGTAGGGAAAGAGTGT --overlap 3 --trim-n --minimum-length 70 -o $OUTFWD -p $OUTREV --json $LOGFILE --discard-casava $FQFWD $FQREV"
 
 printf "\n%s\n\n" "$CMD"
 
@@ -115,7 +119,53 @@ eval $CMD
 --- end bash code ---
 
 
-## (1e) Remove Poly-G tracts. This is only necessary for sequencing data produced with two-channel sequencing systems.
+If Poly-G trimming is unnecessary (step 1e) this is the final pre-mapping fastq quality control step. In this case, use the following script/code
+to trim adapters. This will produce quality controlled paired read files ("R1" and "R2") and recovered unpaired reads ("U").
+
+$ sbatch /mnt/research/Fitz_Lab/projects/atelopus/atelopus_wgs/clean_data/scripts/batch2_aviti/trim_adapters_array_2.sh
+
+--- start bash code ---
+
+EXEC='cutadapt'
+EXEC2='/mnt/research/Fitz_Lab/projects/atelopus/atelopus_wgs/clean_data/scripts/batch2_aviti/rescueUnpaired.pl'
+METADATA='/mnt/research/Fitz_Lab/projects/atelopus/atelopus_wgs/metadata/atelopus_wgs_metadata.tsv'
+FQDIR='/mnt/gs21/scratch/lindero1/atelopus/wgs/deduplicate_fastq'
+FQPREFIX=$(sed -n "${SLURM_ARRAY_TASK_ID}p" "$METADATA" | cut -f2,4 | sed "s/[[:space:]]/_/")
+BATCH='aviti1'
+FQFWD="${FQDIR}/${FQPREFIX}_${BATCH}_R1.fastq.gz"
+FQREV="${FQDIR}/${FQPREFIX}_${BATCH}_R2.fastq.gz"
+OUTDIR='/mnt/gs21/scratch/lindero1/atelopus/wgs/trim_adapters'
+OUTFWD="${OUTDIR}/${FQPREFIX}_${BATCH}_qcpass_R1.fastq.gz"
+OUTREV="${OUTDIR}/${FQPREFIX}_${BATCH}_qcpass_R2.fastq.gz"
+SHORTR1="${OUTDIR}/${FQPREFIX}_${BATCH}_short_R1.fastq.gz"
+SHORTR2="${OUTDIR}/${FQPREFIX}_${BATCH}_short_R2.fastq.gz"
+OUTUNPAIR="${OUTDIR}/${FQPREFIX}_${BATCH}_qcpass_U.fastq.gz"
+LOGFILE="/mnt/research/Fitz_Lab/projects/atelopus/atelopus_wgs/clean_data/trim_adapters/stats/${FQPREFIX}_${BATCH}.cutadapt.json"
+
+CMD="$EXEC -a AGATCGGAAGAGCACACGTCTGAACTCCAGTCA -A AGATCGGAAGAGCGTCGTGTAGGGAAAGAGTGT --overlap 3 --trim-n --minimum-length 70 -o $OUTFWD -p $OUTREV \
+--too-short-output $SHORTR1 --too-short-paired-output $SHORTR2 --json $LOGFILE --discard-casava $FQFWD $FQREV"
+
+printf "\n%s\n\n" "$CMD"
+
+eval $CMD
+
+wait
+
+CMD2="$EXEC2 --fq1 $SHORTR1 --fq2 $SHORTR2 --outname $OUTUNPAIR --minlen 70"
+printf "\n%s\n\n" "$CMD2"
+eval $CMD2
+
+wait
+
+rm $SHORTR1
+rm $SHORTR2
+
+--- end bash code ---
+
+
+## (1e) Remove Poly-G tracts. This is only necessary for sequencing data produced with two-channel sequencing systems (e.g. Illumina Novoseq).
+## Note that the Aviti uses a 4-color system and so this step should not be performed to remove poly-G artifacts resulting from confounded 
+## color signals.
 
 The trim_polyg_array.sh script also formats fastq names to <specimen_id>_<library_id>_R[:digit:].fastq.gz, which is required 
 by mapping wrapper script.
@@ -220,7 +270,8 @@ eval $CMD
 
 
 ## (1h) Split quality-controlled fastq files back into separate lanes so that batch information can be incorporated into the BAM files.
-## This is only necessary is libraries were sequenced on multiple lanes.
+## This is only necessary if libraries were sequenced on multiple lanes. Note that for files sequenced using one lane, the lane number must  
+## still be incorporated into fastq name for the map_reads.sh script (see section 2b).
 
 $ sbatch /mnt/research/Fitz_Lab/projects/atelopus/atelopus_wgs/clean_data/scripts/split_reads_array.sh
 implements:
@@ -260,7 +311,27 @@ $ bwa index /mnt/research/Fitz_Lab/ref/frog/atelopus_ignescens/AteIgnes.fasta
 ## (2b) Map quality-controlled reads to the reference genome.
 ## The map_reads.sh script also marks residual PCR and optical duplicates based on mapping coordinates.
 
-This output of map_reads.sh is one BAM file per individual/library.
+In order for the mapping script to set some of the SAM read group information (@RG) the names of the 
+input files need to be formatted at follows:
+
+<specimen_id>_<library_id>_qcpass_<lane number>_<forward or reverse read set>.fastq.gz
+
+which should match regex
+
+^[^_]+_[^_]+_qcpass_\d+_R[12].fastq.gz$
+
+Below is an example formatted fastq name for forward reads for sample "CJ4773" from lane 1.
+
+CJ4773_TLAWG10_qcpass_1_R1.fastq.gz
+
+Below is an example formatted fastq name for reverse reads for sample "KEJBUH34" from lane 5.
+
+KEJBUH34_TLAWG3_qcpass_5_R2.fastq.gz
+
+If a sample was sequenced using only one lane, the fastq name must still include the lane number.
+
+
+The output of map_reads.sh is one BAM file per individual/library.
 
 $ sbatch /mnt/research/Fitz_Lab/projects/atelopus/atelopus_wgs/map/scripts/map_reads_array.sh
 implements:
@@ -272,10 +343,13 @@ REF='/mnt/research/Fitz_Lab/ref/frog/atelopus_ignescens/AteIgnes.fasta'
 IDLIST='/mnt/research/Fitz_Lab/projects/atelopus/atelopus_wgs/metadata/atelopus_wgs_specimen_id.txt'
 FQDIR='/mnt/gs21/scratch/lindero1/atelopus/wgs/resplit'
 OUTDIR='/mnt/gs21/scratch/lindero1/atelopus/wgs/untrimmed_bam'
+SEQPLATFORM='ILLUMINA'
 SAMPID=$(sed -n "${SLURM_ARRAY_TASK_ID}p" "$IDLIST")
 NTHREAD=10
 
-CMD="$EXEC $REF $SAMPID $FQDIR $OUTDIR 'Atelopus toad whole genome sequencing data produced by the Michigan State University RTSF Genomics Core, project JAY14502 KEJ_Atelopus_WG_RR_2023' $NTHREAD"
+CMD="$EXEC $REF $SAMPID $FQDIR $OUTDIR \
+$SEQPLATFORM 'Atelopus toad whole genome sequencing data produced by the Michigan State University RTSF Genomics Core, project JAY14502 KEJ_Atelopus_WG_RR_2023' $NTHREAD"
+
 printf "\n%s\n" "$CMD"
 eval $CMD
 

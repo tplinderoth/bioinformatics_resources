@@ -1,10 +1,10 @@
 #!/bin/bash
 
-# map_reads.sh <reference fasta> <sample name, e.g. 'T_101'> <fastq directory> <output directory> <data description> [number threads]
+# map_reads.sh <reference fasta> <sample name, e.g. 'T_101'> <fastq directory> <output directory> <sequencing platform> <data description> [number threads]
 
-if [ $# -lt 4 ]
+if [ $# -lt 6 ]
 then
-	>&2 echo "map_reads.sh <reference fasta> <sample name, e.g. 'T_101'> <fastq directory> <output directory> <data description> [number threads]"
+	>&2 echo "map_reads.sh <reference fasta> <sample name, e.g. 'T_101'> <fastq directory> <output directory> <sequencing platform> <data description> [number threads]"
 	exit
 fi
 
@@ -13,9 +13,10 @@ REF=$1 # reference fasta
 SAMPLE_NAME=$2 # sample name, e.g. T_101
 FQDIR=$3
 OUTDIR=$4
-if [ $# -gt 5 ]; then NTHREAD=$6; fi
+PLATFORM=$5
+if [ $# -gt 6 ]; then NTHREAD=$7; fi
 
-DATADS=$5 # data description, e.g. 'Whole genome sequences from Florida scrub jays sequenced for the Mosaic project.'
+DATADS=$6 # data description, e.g. 'Whole genome sequences from Florida scrub jays sequenced for the Mosaic project.'
 
 if [[ "$FQDIR" == */ ]]; then FQDIR=$(echo "$FQDIR" | sed 's/\/$//'); fi
 
@@ -27,12 +28,17 @@ OUTPREFIX="${OUTDIR}/${SAMPLE_NAME}"
 fqlist=($(find $FQDIR -name "${SAMPLE_NAME}*.fastq.gz" | tr '\n' ' '))
 numlanes=$(perl -e '$nfile = <>; print $nfile/2' <<< ${#fqlist[@]}) # this is the number of lanes library was sequenced on
 if [ $numlanes -lt 1 ]; then >&2 printf "No files with sample name %s in %s\n" "$SAMPLE_NAME" "$FQDIR"; exit 1; fi
+
+lane_n=()
+for fq in ${fqlist[@]}; do lnn=$(echo "$fq" | perl -ne 'print $1 if $_ =~ /_qcpass_(\d+)_R[12]/'); if [[ ! " ${lane_n[*]} " =~ [[:space:]]${lnn}[[:space:]] ]]; then lane_n+=("$lnn"); fi; done
+
 samplib=$(echo "${fqlist[0]}" | perl -e '$fqname = <>; print $1 if $fqname =~ /_([^_]+)_qcpass_\d+_[^_]+\.fastq\.gz$/')
 fqprefix="${SAMPLE_NAME}_${samplib}"
 declare -a readheader
 
 # LOOP OVER LANES TO MAP EACH SET OF PE FILES
-for lanenum in $(seq 1 $numlanes)
+lanecounter=1
+for lanenum in ${lane_n[@]}
 do
 
 	prevrg='N'
@@ -48,13 +54,13 @@ do
 		readheader=$(zcat "${FQDIR}/${fqprefix}_qcpass_${lanenum}_R1.fastq.gz" | sed -n "${lstart}p;${lend}q" | sed 's/ [[:digit:]]//')
 		readinfo=($(echo "$readheader" | perl -e 'chomp($read = <>); @arr = split(/:/,$read); print "@arr[2,3,$#arr]";'))
 		barcode=$(sed 's/+/-/' <<< "${readinfo[2]}")
-		readgroup="@RG\tID:${readinfo[0]}.${readinfo[1]}\tBC:${barcode}\tDS:${DATADS}\tLB:${samplib}\tPL:ILLUMINA\tPU:${readinfo[0]}.${readinfo[1]}.${barcode}\tSM:${SAMPLE_NAME}"
+		readgroup="@RG\tID:${readinfo[0]}.${readinfo[1]}\tBC:${barcode}\tDS:${DATADS}\tLB:${samplib}\tPL:${PLATFORM}\tPU:${readinfo[0]}.${readinfo[1]}.${barcode}\tSM:${SAMPLE_NAME}"
 
 		if [ "$readgroup" = "$prevrg" ] && ! [[ "$barcode" =~ 'N' ]]; then ((nmatch++)); fi
 		prevrg="$readgroup"
 	done
 
-	printf "\n--MAPPING READS (lane %i/%i)--\n" "$lanenum" "$numlanes"
+	printf "\n--MAPPING READS (lane %i/%i)--\n" "$lanecounter" "$numlanes"
 	#echo "$readgroup"; exit # debug
 
 	# map paired-end reads
@@ -66,12 +72,11 @@ do
 	if [ $numlanes -gt 1 ]; then OUTBAM+="_${lanenum}.bam"; else OUTBAM+=".bam"; fi
 
 	MAPCMD="bwa mem -t $NTHREAD -R '$readgroup' $REF $FWDFQ $REVFQ | samtools view -b > $OUTBAM"
-
 	printf "\n%s\n\n" "$MAPCMD"
-
 	eval $MAPCMD
-
 	wait
+
+	((lanecounter++))
 
 done
 
