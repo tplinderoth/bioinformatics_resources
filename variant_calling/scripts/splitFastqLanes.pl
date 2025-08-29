@@ -1,20 +1,24 @@
 #!/usr/bin/perl
 
-# splitFastqLanes.pl <library name, e.g. 'T_090_CSFP210021209-1a'> <directory of reads> <output directory>
+# splitFastqLanes.pl [string to append to library name] <library name, e.g. 'T_090_CSFP210021209-1a'> <directory of reads> <output directory>
 
 use warnings;
 use strict;
 use IO::Zlib;
 
 die(qq/
-splitFastqLanes.pl <library name, e.g. 'T_090_CSFP210021209-1a'> <directory of reads> <output directory>
+splitFastqLanes.pl [string to append to library name] <library name, e.g. 'T_090_CSFP210021209-1a'> <directory of reads> <output directory>
 
 This script works for reads with headers conforming to the casava 1.8 format.
+
+The output fastq files will be named <library><name modifier if provided>_<lane number>_R[1|2].fastq.gz
 \n/) if (!@ARGV || scalar @ARGV < 3);
 
-my $lib = $ARGV[0];
-my $fqdir = $ARGV[1];
-my $outdir = $ARGV[2];
+my $outdir = pop @ARGV;
+my $fqdir = pop @ARGV;
+my $lib = pop @ARGV;
+
+my $lib_modifier = @ARGV ? $ARGV[0] : '';
 
 $fqdir =~ s/\/$//;
 $outdir =~ s/\/$//;
@@ -41,8 +45,8 @@ close $fqfh;
 
 foreach my $lane (keys %id) {
 	my $n = $1 if ($lane =~ /^[^:]+:[^:]+:[^:]+:(\d+)$/);
-	my $out1 = "${outdir}/${lib}_${n}_R1.fastq.gz";
-	my $out2 = "${outdir}/${lib}_${n}_R2.fastq.gz";
+	my $out1 = "${outdir}/${lib}${lib_modifier}_${n}_R1.fastq.gz";
+	my $out2 = "${outdir}/${lib}${lib_modifier}_${n}_R2.fastq.gz";
 	my $cmd1 = "zgrep -A3 $lane $r1fq | gzip > $out1";
 	my $cmd2 = "zgrep -A3 $lane $r2fq | gzip > $out2";
 	print STDOUT "Extracting $lane reads from $r1fq\n";
