@@ -32,12 +32,19 @@ my %id;
 my $fqfh = fileopen($r1fq);
 die("-->exiting\n") if (!$fqfh);
 
-while (<$fqfh>) {
-	if ($_ =~ /^@/) {
-		my $idx = $1 if ($_ =~ /^([^:]+:[^:]+:[^:]+:[^:]+):/);
+do {
+	my $fqline = <$fqfh>;
+	if ($fqline =~ /^@/) {
+		my $idx = ($fqline =~ /^([^:]+:[^:]+:[^:]+:[^:]+):/) ? $1 : '';
+		die ("Error: Unrecognized fastq header format:\n$idx\n") if (!$idx);
 		$id{$idx} = 1 if (!exists $id{$idx});
+	} else {
+		die("Error: Expected read header did not start with \'@\':\n$fqline\n");
 	}
-}
+	for (my $i=0; $i<3; $i++) {
+		$fqline = <$fqfh>;
+	}
+} while (!eof $fqfh);
 
 close $fqfh;
 
