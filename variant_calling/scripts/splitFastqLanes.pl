@@ -11,7 +11,7 @@ splitFastqLanes.pl [string to append to library name] <library name, e.g. 'T_090
 
 This script works for reads with headers conforming to the casava 1.8 format.
 
-The output fastq files will be named <library><name modifier if provided>_<lane number>_R[1|2].fastq.gz
+The output fastq files will be named <library><name modifier if provided>_<batch number>_R[1|2].fastq.gz
 \n/) if (!@ARGV || scalar @ARGV < 3);
 
 my $outdir = pop @ARGV;
@@ -50,8 +50,9 @@ close $fqfh;
 
 # extract out sets of reads from different lanes
 
+my $n = 1;
 foreach my $lane (keys %id) {
-	my $n = $1 if ($lane =~ /^[^:]+:[^:]+:[^:]+:(\d+)$/);
+	#my $n = $1 if ($lane =~ /^[^:]+:[^:]+:[^:]+:(\d+)$/);
 	my $out1 = "${outdir}/${lib}${lib_modifier}_${n}_R1.fastq.gz";
 	my $out2 = "${outdir}/${lib}${lib_modifier}_${n}_R2.fastq.gz";
 	my $cmd1 = "zgrep -A3 $lane $r1fq | gzip > $out1";
@@ -60,6 +61,7 @@ foreach my $lane (keys %id) {
 	system($cmd1);
 	print STDOUT "Extracting $lane reads from $r2fq\n";
 	system($cmd2);
+	$n++;
 }
 
 exit;
