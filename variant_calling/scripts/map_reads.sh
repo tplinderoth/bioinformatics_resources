@@ -198,9 +198,9 @@ do
 		if [ "$readgroup" = "$prevrg" ] && ! [[ "$barcode" =~ 'N' ]]; then ((nmatch++)); fi
 		prevrg="$readgroup"
 	done
-	if [! -z "$SAMPLE_LIB" ]; then readgroup+="\tLB:${SAMPLE_LIB}"; fi
-	if [! -z "$PLATFORM" ]; then readgroup+="\t${PLATFORM}"; fi
-	if [! -z "DATADS" ]; then readgroup+="\t${DATADS}"; fi
+	if [ ! -z "$SAMPLE_LIB" ]; then readgroup+="\tLB:${SAMPLE_LIB}"; fi
+	if [ ! -z "$PLATFORM" ]; then readgroup+="\t${PLATFORM}"; fi
+	if [ ! -z "DATADS" ]; then readgroup+="\t${DATADS}"; fi
 
 	printf "\n--MAPPING READS (lane %i/%i)--\n" "$lanecounter" "$numlanes"
 	#echo "$readgroup"; exit # debug
@@ -210,7 +210,9 @@ do
 	OUTBAM="${OUTFULL}_raw"
 	if [ $numlanes -gt 1 ]; then OUTBAM+="_${lanenum}.bam"; else OUTBAM+=".bam"; fi
 
-	MAPCMD="bwa mem -t $NTHREAD -R '$readgroup' $BWAOPT $REF $FWDFQ $REVFQ | samtools view -b > $OUTBAM"
+	MAPCMD="bwa mem -t $NTHREAD -R '$readgroup'"
+	if [ ! -z "$BWAOPT" ]; then MAPCMD+=" $BWAOPT"; fi
+	MAPCMD+=" $REF $FWDFQ $REVFQ | samtools view -b > $OUTBAM"
 	printf "\n%s\n\n" "$MAPCMD"
 	eval $MAPCMD
 	wait
