@@ -175,7 +175,7 @@ lanecounter=1
 for lanenum in ${lane_n[@]}
 do
 
-	FWDFQ="${$FQDIR}/${SAMPLE_NAME}"
+	FWDFQ="${FQDIR}/${SAMPLE_NAME}"
 	if [ $batchid -eq 1 ]; then FWDFQ+="_${lanenum}"; fi
 	FWDFQ+="_R1.fastq.gz"
 	REVFQ=$( echo "$FWDFQ" | sed 's/_R1\.fastq\.gz$/_R2\.fastq\.gz/')
