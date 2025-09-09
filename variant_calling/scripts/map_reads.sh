@@ -227,13 +227,13 @@ if [ $numlanes -gt 1 ]; then
 	declare -a mergelist
 	for i in ${lane_n[@]}
 	do
-		mergelist+=("${OUTDIR}/${OUTFULL}_raw_${i}.bam")
+		mergelist+=("${OUTFULL}_raw_${i}.bam")
 	done
 	MERGE_CMD="samtools merge -n -c -@ $NTHREAD -o ${OUTFULL}_raw.bam ${mergelist[@]}"
 	printf "\n%s\n\n" "$MERGE_CMD"
 	eval $MERGE_CMD
 else
-	printf "\nSingle lane, no merging necessary.\n"
+	printf "\nSingle batch, no merging necessary.\n"
 fi
 
 printf "\n--SORTING AND MARKING DUPLICATES--\n"
@@ -246,7 +246,7 @@ printf "\n--SORTING AND MARKING DUPLICATES--\n"
 DIVTHREAD=$(perl -e '$thread = <>; print int($thread/3)' <<< "$NTHREAD")
 OUTBAM2="${OUTFULL}_untrimmed.bam"
 
-POSTMAP_CMD="samtools fixmate -m -@ $DIVTHREAD -u ${OUTDIR}/${OUTFULL}_raw.bam - | samtools sort -u -@ $DIVTHREAD | samtools markdup -s -S -O BAM -@ $DIVTHREAD - ${OUTBAM2}"
+POSTMAP_CMD="samtools fixmate -m -@ $DIVTHREAD -u ${OUTFULL}_raw.bam - | samtools sort -u -@ $DIVTHREAD | samtools markdup -s -S -O BAM -@ $DIVTHREAD - ${OUTBAM2}"
 
 printf "\n%s\n\n" "$POSTMAP_CMD"
 
