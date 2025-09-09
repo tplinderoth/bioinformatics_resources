@@ -57,13 +57,15 @@ cd $workdir
 
 EXEC='/mnt/research/Fitz_Lab/projects/atelopus/atelopus_wgs/map/scripts/map_reads.sh'
 REF='/mnt/research/Fitz_Lab/ref/frog/atelopus_ignescens/AteIgnes.fasta'
-IDLIST='/mnt/research/Fitz_Lab/projects/atelopus/atelopus_wgs/metadata/atelopus_wgs_specimen_id.txt'
+IDLIST='/mnt/research/Fitz_Lab/projects/atelopus/atelopus_wgs/metadata/atelopus_wgs_specimen_id.txt' # tab-delimited list of samples (one per row) with columns (1) sample ID, (2) sample library
 FQDIR='/mnt/gs21/scratch/lindero1/atelopus/wgs/resplit'
 OUTDIR='/mnt/gs21/scratch/lindero1/atelopus/wgs/untrimmed_bam'
-SEQPLATFORM='ILLUMINA'
-SAMPID=$(sed -n "${SLURM_ARRAY_TASK_ID}p" "$IDLIST")
+SEQPLATFORM='Illumina'
+SAMPID=$(sed -n "${SLURM_ARRAY_TASK_ID}p" "$IDLIST" | cut -f1)
+SAMPLIB=$(sed -n "${SLURM_ARRAY_TASK_ID}p" "$IDLIST" | cut -f2)
 NTHREAD=10
 
-CMD="$EXEC $REF $SAMPID $FQDIR $OUTDIR $SEQPLATFORM 'Atelopus toad whole genome sequencing data produced by the Michigan State University RTSF Genomics Core, project JAY14502 KEJ_Atelopus_WG_RR_2023' $NTHREAD"
+CMD="$EXEC --ref $REF --$SAMPID $SAMPID --infq_dir $FQDIR --outdir $OUTDIR --sample_lib $SAMPLIB --name_mod qcpass --platform $SEQPLATFORM \
+--ds 'Atelopus toad whole genome sequencing data produced by the Michigan State University RTSF Genomics Core, project JAY14502 KEJ_Atelopus_WG_RR_2023' --threads $NTHREAD"
 printf "\n%s\n" "$CMD"
 eval $CMD
