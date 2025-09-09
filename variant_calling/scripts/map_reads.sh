@@ -202,7 +202,7 @@ do
 	if [ ! -z "$PLATFORM" ]; then readgroup+="\tPL:${PLATFORM}"; fi
 	if [ ! -z "DATADS" ]; then readgroup+="\tDS:${DATADS}"; fi
 
-	printf "\n--MAPPING READS (lane %i/%i)--\n" "$lanecounter" "$numlanes"
+	printf "\n--MAPPING READS (batch %i/%i)--\n" "$lanecounter" "$numlanes"
 	#echo "$readgroup"; exit # debug
 
 	# map paired-end reads
