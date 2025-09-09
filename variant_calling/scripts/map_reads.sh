@@ -199,8 +199,8 @@ do
 		prevrg="$readgroup"
 	done
 	if [ ! -z "$SAMPLE_LIB" ]; then readgroup+="\tLB:${SAMPLE_LIB}"; fi
-	if [ ! -z "$PLATFORM" ]; then readgroup+="\t${PLATFORM}"; fi
-	if [ ! -z "DATADS" ]; then readgroup+="\t${DATADS}"; fi
+	if [ ! -z "$PLATFORM" ]; then readgroup+="\tPL:${PLATFORM}"; fi
+	if [ ! -z "DATADS" ]; then readgroup+="\tDS:${DATADS}"; fi
 
 	printf "\n--MAPPING READS (lane %i/%i)--\n" "$lanecounter" "$numlanes"
 	#echo "$readgroup"; exit # debug
