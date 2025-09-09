@@ -221,7 +221,7 @@ do
 
 done
 
-printf "\n--MERGING SEPARATE LANE BAMS--\n"
+printf "\n--MERGING SEPARATE BATCH BAMS--\n"
 
 if [ $numlanes -gt 1 ]; then
 	declare -a mergelist
