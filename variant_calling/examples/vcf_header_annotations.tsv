@@ -1,0 +1,12 @@
+REPGQ	Number of genotyped individuals with GQ of 15 or above for classes Eaton, Country, City, East_West, Big_Valley, Eaton_x_Country, Country_x_East_West, 11, unknown, J67, After_Program
+REPDP	Number of genotyped individuals with DP of 4 or greater for classes Eaton, Country, City, East_West, Big_Valley, Eaton_x_Country, Country_x_East_West, 11, unknown, J67, After_Program
+LowDP	Site DP less than 0.4 x mean of the covered genome-wide DP distribution after excluding sites with DP below 50
+HighDP	Site DP greater than 2 x mean of the covered genome-wide DP distribution after excluding sites with DP below 50
+HighHet	P-value for test of excess heterozygosity below 1e-4, which is below the 0.02 genome-wide quantile for sites with site DP of at least 505x
+NoCov	No mapped reads
+LowCov	Total site depth less than 0.3 x mean of the covered genome-wide site depth distribution after excluding sites with depth below 50x
+ExcessCov	Total site depth more than 2 x mean of the covered genome-wide site depth distribution after exluding sites with depth below 50x
+LowMQ	Root mean square map quality below 35
+ExcessMQ0	More than 10% of reads have map quality of zero
+LowBQ	Root mean square base quality below 20
+ExcessBQ0	More than 1% of bases have quality of zero
