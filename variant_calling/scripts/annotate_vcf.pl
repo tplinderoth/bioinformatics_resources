@@ -11,7 +11,7 @@ use IO::Zlib;
 use List::MoreUtils qw(uniq);
 #use warnings FATAL => 'all';
 
-my $version = '1.3.0'; # updated to provide variant type information and parse ngsParalog calcLR output
+my $version = '1.3.1'; # updated to take custom filter annotations
 my $alfile = undef;
 my $alfields = undef;
 my $anctype = 'parsimony';
@@ -29,6 +29,25 @@ my $maxpoly = undef;
 my $mingq = 0;
 my $devsnp = undef; # ngsParalog calcLR output file
 my $devsnp_maxlr = undef; # maximum ngsParalog calcLR LR
+my $anno = undef; # file with custom annotations
+
+my %default_flags = (
+'REPGQ' => "Number of individuals from different classes that are genotyped with a minimum degree of confidence",
+'REPDP' => "Number of genotyped individuals from different classes with a minimum DP",
+'HET' => "Proportion of heterozygous individuals",
+'DEVLRT' => "Likelihood ratio test statistic from ngsParalog test of a deviant variant",
+'LowDP' => "Total site DP below excessively low cutoff of INTEGER",
+'HighDP' => "Total site DP above excessively high cutoff of INTEGER",
+'NoCov' => "No mapped reads",
+'LowCov' => "Excessively low total site depth",
+'ExcessCov' => "Excessively high total site depth",
+'HighHet' => "Proportion of heterozygous individuals above excessively high cutoff of FLOAT",
+'LowMQ' => "Low average mapping quality",
+'ExcessMQ0' => "Excessively high proportion of reads with mapping quality of zero",
+'LowBQ' => "Low average base quality",
+'ExcessBQ0' => "Excessively high proportion of reads with base quality of zero",
+'Poly' => "Proportion of polymorphic samples above excessively high cutoff of FLOAT",
+'DeviantVar' => "Deviant variant based on ngsParalog LRT statistic above cutoff of FLOAT");
 
 die(qq/
 annotate_vcf.pl version $version
@@ -37,16 +56,17 @@ annotate_vcf.pl [options] <vcf file>
 OR
 cat <vcf file> | annotate_vcf.pl [options]
 
+--anno       TSV file of annotations for the VCF header, use --anno 'default' to see default descriptions and more info
 --alfile     File of outgroup alleles in pafAlleles format
 --alfields   Column numbers of alleles to use from alleles file, 1-indexed and ','-separated [$fstart...]
 --anctype    Infer ancestral allele using 'parsimony' or as the 'major' allele among outgroups [$anctype]
---dpbounds   LowDP and HighDP bounds to annotate FILTER field, format '<INT lower bound>,<INT upper bound>'
---hetbound   Lower p-value bound for excess heterozygosity test \(uses INFO\/ExcHet field\)
+--dpbounds   LowDP and HighDP bounds to annotate FILTER field, format '<INT lower bound>,<INT upper bound>', triggers LowDP, HighDP flags
+--hetbound   Lower p-value bound for excess heterozygosity test \(uses INFO\/ExcHet field\), triggers HighHet flag
 --rmfilter   ','-delimited list of FILTER annotations to remove
---bed        Bed format file with FILTER annotations to add in the 4th column
+--bed        Bed format file with FILTER annotations to add in the 4th column, see --flags 'default' for accepted flags
 --bedlist    ','-delimited list of FILTER annotations to ignore from bed
 --overwrite  Replace all existing filters, otherwise new filters are appended
---genorep    File of sample subset indexes for appending genotype representation to the INFO field
+--genorep    File of sample subset indexes for appending genotype representation to the INFO field, triggers REPGQ, REP flags
 --dohet      Calculate proportion of heterozygous genotypes, adds INFO\/HET
 --mingq      Minimum genotype quality when counting genotypes [$mingq]
 --maxpoly    Upper heterozygosity bound \(uses INFO\/HET field\)
@@ -79,19 +99,64 @@ Notes:
 
 GetOptions('alfile=s' => \$alfile, 'alfields=s' => \$alfields, 'dpbounds=s' => \$dpbounds, 'hetbound=f' => \$hetbound, 'rmfilter=s' => \$rmfilter, 
 'anctype=s' => \$anctype, 'bed=s' => \$bed, 'bedlist=s' => \$bedlist, 'overwrite' => \$overwrite, 'genorep=s' => \$genorep, 'dohet' => \$dohet, 
-'mingq=i' => \$mingq, 'maxpoly=f' => \$maxpoly, 'devlr_file=s' => \$devsnp, 'max_devlr=f' => \$devsnp_maxlr);
+'mingq=i' => \$mingq, 'maxpoly=f' => \$maxpoly, 'devlr_file=s' => \$devsnp, 'max_devlr=f' => \$devsnp_maxlr, 'anno=s' => \$anno);
 
 # this is for printing the command to the VCF header
-my %userargs = ('--alfile' => $alfile, '--alfields' => $alfields, '--dpbounds' => $dpbounds, '--hetbound' => $hetbound, '--rmfilter' => $rmfilter, 
+my %userargs = ('--anno' => $anno, '--alfile' => $alfile, '--alfields' => $alfields, '--dpbounds' => $dpbounds, '--hetbound' => $hetbound, '--rmfilter' => $rmfilter, 
 '--anctype' => $anctype, '--bed' => $bed, '--bedlist' => $bedlist, '--overwrite' => $overwrite, '--genorep' => $genorep, '--dohet' => $dohet, '--mingq' => $mingq, 
 '--maxpoly' => $maxpoly, '--devlr_file' => $devsnp, '--max_devlr' => $devsnp_maxlr);
 # disable printing commands if not applicable
 $userargs{"--anctype"} = undef if (!$alfile);
 $userargs{"--bedlist"} = undef if (!$bedlist);
 $userargs{"--genorep"} = undef if (!$genorep);
+$userargs{"--anno"} = undef if (!$anno);
+
+# print information about annotation flags if requested
+
+die(qq/
+Optional VCF annotation flags, the default descriptions, and the argument that triggers the flag for inclusion.
+
+To change the default descriptions provide a tab-delimited file to --anno with columns [1] flag ID \(case sensitive\), [2] description \(should not contain tabs\).
+Each row in the --anno file is a different flag. Do not enclose descriptions in double quotes.
+
+INFO annotations:
+REPGQ  \"$default_flags{REPGQ}\" \(--genorep\)
+REPDP  \"$default_flags{REPDP}\" \(--genorep\)
+HET    \"$default_flags{HET}\" \(--dohet\)
+DEVLRT \"$default_flags{DEVLRT}\" (--devlr_file)
+
+FILTER annotations:
+LowDP      \"$default_flags{LowDP}\" \(--dpbounds\)
+HighDP     \"$default_flags{HighDP}\" \(--dpbounds\)
+HighHet    \"$default_flags{HighHet}\" \(--hetbound\)
+Poly       \"$default_flags{Poly}\" \(--maxpoly\)
+DeviantVar \"$default_flags{DeviantVar}\" \(--max_devlr\)
+NoCov      \"$default_flags{NoCov}\" \(--bed\)
+LowCov     \"$default_flags{LowCov}\" \(--bed\)
+ExcessCov  \"$default_flags{ExcessCov}\" \(--bed\)
+LowMQ      \"$default_flags{LowMQ}\" \(--bed\)
+ExcessMQ0  \"$default_flags{ExcessMQ0}\" \(--bed\)
+LowBQ      \"$default_flags{LowBQ}\" \(--bed\)
+ExcessBQ0  \"$default_flags{ExcessBQ0}\" \(--bed\)
+\n/) if ($anno && ! -f $anno && $anno eq "default");
 
 # check arguments
 die("Error: --mingq $mingq invalid\n") if ($mingq < 0);
+
+# read in annotation file
+if ($anno) {
+	open(my $annofh, '<', $anno) or die("Unable to open file of flag descriptions $anno\n");
+	while (<$annofh>) {
+		chomp;
+		my @tok = split($_, /\t/);
+		if (exists $default_flags{$tok[0]}) {
+			$default_flags{$tok[0]} = $tok[1];
+		} else {
+			die("Unrecognized flag $tok[0] in flag description file\n");
+		}
+	}
+	close $annofh;
+}
 
 # read in VCF
 
@@ -197,6 +262,9 @@ if ($dpbounds) {
 	} elsif ($dpcutoff[0] >= $dpcutoff[1]) {
 		die("ERROR: --dpbounds upper bound must be greater than the lower bound value\n");
 	}
+
+	$default_flags{LowDP} =~ s/INTEGER$/$dpcutoff[0]/;
+	$default_flags{HighDP} =~ s/INTEGER$/$dpcutoff[1]/;
 	
 	$delfilter{HighDP} = 1;
 	$delfilter{LowDP} = 1;
@@ -204,16 +272,19 @@ if ($dpbounds) {
 
 if ($hetbound) {
 	die ("--hetbound outside [0,1] interval\n") if ($hetbound < 0 || $hetbound > 1);
+	$default_flags{HighHet} =~ s/FLOAT$/$hetbound/;
 	$delfilter{HighHet} = 1;
 }
 
 if ($devsnp_maxlr) {
 	die("--max_devlr must be >= 0\n") if ($devsnp_maxlr < 0);
+	$default_flags{DeviantVar} =~ s/FLOAT$/$devsnp_maxlr/;
 	$delfilter{DeviantVar} = 1;
 }
 
 if (defined $maxpoly && ($maxpoly < 0 || $maxpoly > 1)) {
 	die("Error: --maxpoly out of range [0,1]\n");
+	$default_flags{Poly} =~ s/FLOAT$/$maxpoly/;
 	$delfilter{Poly} = 1;
 }
 
@@ -265,33 +336,31 @@ $command .= "$vcf" if ($vcf);
 $command =~ s/\s$//;
 $command .= "\">\n";
 
-# Should make subsequent versions take a header annotation file to generalize this for different
 # filtering parameters.
 
 my ($grp_gq_string, $grp_dp_string);
 
 my $aa_string = "##INFO=<ID=AA,Number=1,Type=String,Description=\"Ancestral Allele\">\n";
 if ($genorep) {
-	$grp_gq_string = "##INFO=<ID=REPGQ,Number=" . scalar(@grpid) . ",Type=Integer,Description=\"Number of genotyped individuals with GQ of 15 or above for classes " . join(', ',@grpid) . "\">\n";
-	$grp_dp_string = "##INFO=<ID=REPDP,Number=" . scalar(@grpid) . ",Type=Integer,Description=\"Number of genotyped individuals with DP of 2 or greater for classes " . join(', ',@grpid) . "\">\n";
+	$grp_gq_string = "##INFO=<ID=REPGQ,Number=" . scalar(@grpid) . ",Type=Integer,Description=\"$default_flags{REPGQ}\">\n";
+	$grp_dp_string = "##INFO=<ID=REPDP,Number=" . scalar(@grpid) . ",Type=Integer,Description=\"$default_flags{REPDP}\">\n";
 }
-my $het_string="##INFO=<ID=HET,Number=1,Type=Float,Description=\"Proportion of genotypes that are heterozygous\">\n";
+my $het_string="##INFO=<ID=HET,Number=1,Type=Float,Description=\"$default_flags{HET}\">\n";
 my $vt_string = "##INFO=<ID=VT,Number=.,Type=String,Description=\"Variant type\">\n";
-my $devvar_lrt_string="##INFO=<ID=DEVLRT,Number=1,Type=Float,Description=\"ngsParalog likelihood ratio test statistic for a SNP being deviant in Atelopus ignescens\">\n";
+my $devvar_lrt_string="##INFO=<ID=DEVLRT,Number=1,Type=Float,Description=\"$default_flags{DEVLRT}\">\n";
 
-my $lowdp_string = "##FILTER=<ID=LowDP,Description=\"Site DP less than 0.4x the mean genome-wide site DP\">\n";
-my $highdp_string = "##FILTER=<ID=HighDP,Description=\"Site DP greater than 2.5x the mean genome-wide site DP\">\n";
-my $highhet_string = "##FILTER=<ID=HighHet,Description=\"P-value for test of excess heterozygosity below cutoff\">\n";
-my $poly_string = "##FILTER=<ID=Poly,Description=\"Proportion of polymorphic samples is greater than cutoff\">\n";
-$poly_string =~ s/cutoff/${maxpoly}/ if defined $maxpoly;
-my $lowcov_string = "##FILTER=<ID=LowCov,Description=\"Total site depth less than 0.4x the mean genome-wide site depth\">\n";
-my $excesscov_string = "##FILTER=<ID=ExcessCov,Description=\"Total site depth greater than 2.5x the mean genome-wide site depth\">\n";
-my $lowmq_string = "##FILTER=<ID=LowMQ,Description=\"Root mean square map quality below 35\">\n";
-my $mqzero_string = "##FILTER=<ID=ExcessMQ0,Description=\"More than 10% of reads covering the site have map quality of zero\">\n";
-my $lowbq_string = "##FILTER=<ID=LowBQ,Description=\"Root mean square base quality below 20\">\n";
-my $bqzero_string = "##FILTER=<ID=ExcessBQ0,Description=\"More than 1.89% of bases covering the site have base quality of zero, which is above the genome-wide 0.95 quantile\">\n";
-my $nocov_string = "##FILTER=<ID=NoCov,Description=\"No mapped reads\">\n";
-my $devvar_string = "##FILTER=<ID=DeviantVar,Description=\"Bonferonni-adjusted p-value of a deviant SNP in the Atelopus ignescens sample is below 0.05 based on the likelihood ratio test of ngsParalog\">\n";
+my $lowdp_string = "##FILTER=<ID=LowDP,Description=\"$default_flags{LowDP}\">\n";
+my $highdp_string = "##FILTER=<ID=HighDP,Description=\"$default_flags{HighDP}\">\n";
+my $highhet_string = "##FILTER=<ID=HighHet,Description=\"$default_flags{HighHet}\">\n";
+my $poly_string = "##FILTER=<ID=Poly,Description=\"$default_flags{Poly}\">\n";
+my $lowcov_string = "##FILTER=<ID=LowCov,Description=\"$default_flags{LowCov}\">\n";
+my $excesscov_string = "##FILTER=<ID=ExcessCov,Description=\"$default_flags{ExcessCov}\">\n";
+my $lowmq_string = "##FILTER=<ID=LowMQ,Description=\"$default_flags{LowMQ}\">\n";
+my $mqzero_string = "##FILTER=<ID=ExcessMQ0,Description=\"$default_flags{ExcessMQ0}\">\n";
+my $lowbq_string = "##FILTER=<ID=LowBQ,Description=\"$default_flags{LowBQ}\">\n";
+my $bqzero_string = "##FILTER=<ID=ExcessBQ0,Description=\"$default_flags{ExcessBQ0}\">\n";
+my $nocov_string = "##FILTER=<ID=NoCov,Description=\"$default_flags{NoCov}\">\n";
+my $devvar_string = "##FILTER=<ID=DeviantVar,Description=\"$default_flags{DeviantVar}\">\n";
 
 my @headorder = ('fileformat', 'reference', 'contig', 'INFO', 'FILTER', 'FORMAT', 'ALT', 'other'); # header order
 
