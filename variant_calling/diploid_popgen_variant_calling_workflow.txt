@@ -311,45 +311,56 @@ $ bwa index /mnt/research/Fitz_Lab/ref/frog/atelopus_ignescens/AteIgnes.fasta
 ## (2b) Map quality-controlled reads to the reference genome.
 ## The map_reads.sh script also marks residual PCR and optical duplicates based on mapping coordinates.
 
-In order for the mapping script to set some of the SAM read group information (@RG) the names of the 
-input files need to be formatted at follows:
+The mapping script looks for all fastq files for a sample, and specific library if provided, in a directory
+and maps them to the reference genome with bwa-mem, producing one BAM per sample/library.
 
-<specimen_id>_<library_id>_qcpass_<lane number>_<forward or reverse read set>.fastq.gz
+The input fastq files must be gzipped and named according to
+<sample id>[_sample library][_extra name modifiers][_batch number]_R1|2.fastq.gz
 
-which should match regex
+Optional parts of the fastq file names are contained in square brackets, so the only required part of the name before the
+_R1|2.fastq.gz suffix is the sample ID. If the fastq files contain the sample library in their names, this can be provided with
+the --sample_lib option and sets the LB tag of the read group (@RG) SAM information. Similarly, extra file name strings can be
+supplied with the --name_mod option. The batch number, if present, should be an integer.
 
-^[^_]+_[^_]+_qcpass_\d+_R[12].fastq.gz$
+An example input file could be CJ8192_KJAWG19_qcpass_3_R1.fastq.gz. In this case,
+-CJ8192: sample ID (this will be used for the SAM SM tag).
+-KJAWG19: sample library (will be used for the SAM LB tag).
+-qcpass: Extra characters/information contained in the fastq file name.
+-3: This is the batch number, e.g. the third fastq file produced for this sample/library.
 
-Below is an example formatted fastq name for forward reads for sample "CJ4773" from lane 1.
+Additional SAM read groups tags can be set using
+--platform, e.g. ILLUMINA, which sets the SAM PL tag.
+--ds, e.g. 'Whole sequencing data for Atelopus frogs', sets the the SAM DS tag.
 
-CJ4773_TLAWG10_qcpass_1_R1.fastq.gz
+The final output BAM file for each sample/library will be called <outprefix>_untrimmed.bam. Supply the outfile prefix with the --outprefix option.
+By default the outfile prefix is <sample_ID>[_sample library], noting that the library is only included by default if supplied with --sample_lib and
+present in the input fastq file name.
 
-Below is an example formatted fastq name for reverse reads for sample "KEJBUH34" from lane 5.
+Run the map_reads.sh script without arguments to print a full set of help information and input options.
 
-KEJBUH34_TLAWG3_qcpass_5_R2.fastq.gz
+!!! Remember to index your reference genome with bwa index before running this script!
 
-If a sample was sequenced using only one lane, the fastq name must still include the lane number.
-
-
-The output of map_reads.sh is one BAM file per individual/library.
+Example for running map_reads.sh as an array job:
 
 $ sbatch /mnt/research/Fitz_Lab/projects/atelopus/atelopus_wgs/map/scripts/map_reads_array.sh
 implements:
 
 --- start bash code ---
 
-EXEC='/mnt/research/Fitz_Lab/projects/atelopus/atelopus_wgs/map/scripts/map_reads.sh'
+EXEC='/mnt/research/Fitz_Lab/workflows/bioinformatics_resources/variant_calling/scripts/map_reads.sh'
 REF='/mnt/research/Fitz_Lab/ref/frog/atelopus_ignescens/AteIgnes.fasta'
-IDLIST='/mnt/research/Fitz_Lab/projects/atelopus/atelopus_wgs/metadata/atelopus_wgs_specimen_id.txt'
-FQDIR='/mnt/gs21/scratch/lindero1/atelopus/wgs/resplit'
-OUTDIR='/mnt/gs21/scratch/lindero1/atelopus/wgs/untrimmed_bam'
-SEQPLATFORM='ILLUMINA'
-SAMPID=$(sed -n "${SLURM_ARRAY_TASK_ID}p" "$IDLIST")
-NTHREAD=10
+FQDIR='/mnt/gs21/scratch/lindero1/atelopus/mt_genomes/fastq/platform_merged'
+SAMPLIST="/mnt/research/Fitz_Lab/projects/atelopus/atelopus_wgs/metadata/atelopus_wgs_metadata_qcpass.tsv" # TSV file containing a header and sample IDs (in column 2), library IDs (4), and species (5)
+SAMPID=$(tail -n+2 $SAMPLIST | sed -n "${SLURM_ARRAY_TASK_ID}p" | cut -f2)
+SAMPLIB=$(tail -n+2 $SAMPLIST | sed -n "${SLURM_ARRAY_TASK_ID}p" | cut -f4)
+SPECIES=$(tail -n+2 $SAMPLIST | sed -n "${SLURM_ARRAY_TASK_ID}p" | cut -f5)
+PLAT="ILLUMINA+AVITI"
+DESCRIP="'Whole genome sequencing data for $SPECIES'"
+OUTPREFIX="$SAMPID"
+OUTDIR="/mnt/gs21/scratch/lindero1/atelopus/bams"
+NTHREAD=18
 
-CMD="$EXEC $REF $SAMPID $FQDIR $OUTDIR \
-$SEQPLATFORM 'Atelopus toad whole genome sequencing data produced by the Michigan State University RTSF Genomics Core, project JAY14502 KEJ_Atelopus_WG_RR_2023' $NTHREAD"
-
+CMD="$EXEC --ref $REF --infq_dir $FQDIR --sample_id $SAMPID --platform $PLAT --ds $DESCRIP --name_mod qcpass --outdir $OUTDIR --outprefix $OUTPREFIX --threads $NTHREAD"
 printf "\n%s\n" "$CMD"
 eval $CMD
 
@@ -389,7 +400,9 @@ eval $CMD2
 
 ## (3b) make list of BAMs for which the overlapping read pairs have been trimmed. These are the quality-controlled BAMs used for variant calling.
 
-$ while read -r id; do echo "/mnt/research/Fitz_Lab/projects/atelopus/atelopus_wgs/map/filtered_bam/${id}_filtered.bam" >> /mnt/research/Fitz_Lab/projects/atelopus/atelopus_wgs/map/atelopus_filtered_bam_list.txt; done <<< $(cut -f 2 /mnt/research/Fitz_Lab/projects/atelopus/atelopus_wgs/metadata/atelopus_wgs_metadata_qcpass.tsv | tail -n+2)
+$ while read -r id; do echo "/mnt/research/Fitz_Lab/projects/atelopus/atelopus_wgs/map/filtered_bam/${id}_filtered.bam" \
+>> /mnt/research/Fitz_Lab/projects/atelopus/atelopus_wgs/map/atelopus_filtered_bam_list.txt; done \
+<<< $(cut -f 2 /mnt/research/Fitz_Lab/projects/atelopus/atelopus_wgs/metadata/atelopus_wgs_metadata_qcpass.tsv | tail -n+2)
 
 
 #
@@ -419,7 +432,8 @@ eval $CMD
 
 Summarize genome-wide coverage for all individuals
 
-$ /mnt/research/Fitz_Lab/projects/atelopus/atelopus_wgs/map/scripts/coverage_stats.R /mnt/research/Fitz_Lab/projects/atelopus/atelopus_wgs/metadata/atelopus_wgs_specimen_id.txt /mnt/research/Fitz_Lab/projects/atelopus/atelopus_wgs/map/coverage/coverage_list.txt /mnt/research/Fitz_Lab/projects/atelopus/atelopus_wgs/map/coverage/atelopus_qc_coverage_summary.tsv
+$ /mnt/research/Fitz_Lab/projects/atelopus/atelopus_wgs/map/scripts/coverage_stats.R /mnt/research/Fitz_Lab/projects/atelopus/atelopus_wgs/metadata/atelopus_wgs_specimen_id.txt \
+/mnt/research/Fitz_Lab/projects/atelopus/atelopus_wgs/map/coverage/coverage_list.txt /mnt/research/Fitz_Lab/projects/atelopus/atelopus_wgs/map/coverage/atelopus_qc_coverage_summary.tsv
 
 
 Optional:
@@ -672,8 +686,11 @@ wait
 
 Optional: concatenate regional bamstats output into a single genome-wide bamstats output file.
 
-$ head -n 1 /mnt/gs21/scratch/lindero1/atelopus/wgs/mask/fixed_bamstats/atelopus_all_qc_1.bamstats > /mnt/research/Fitz_Lab/projects/atelopus/atelopus_wgs/variants/mask/bam_stats/atelopus_all_qc_genome.bamstats
-$ for i in {1..12}; do tail -n+2 /mnt/gs21/scratch/lindero1/atelopus/wgs/mask/fixed_bamstats/atelopus_all_qc_${i}.bamstats >> /mnt/research/Fitz_Lab/projects/atelopus/atelopus_wgs/variants/mask/bam_stats/atelopus_all_qc_genome.bamstats; wait; done
+$ head -n 1 /mnt/gs21/scratch/lindero1/atelopus/wgs/mask/fixed_bamstats/atelopus_all_qc_1.bamstats \
+> /mnt/research/Fitz_Lab/projects/atelopus/atelopus_wgs/variants/mask/bam_stats/atelopus_all_qc_genome.bamstats
+
+$ for i in {1..12}; do tail -n+2 /mnt/gs21/scratch/lindero1/atelopus/wgs/mask/fixed_bamstats/atelopus_all_qc_${i}.bamstats \
+>> /mnt/research/Fitz_Lab/projects/atelopus/atelopus_wgs/variants/mask/bam_stats/atelopus_all_qc_genome.bamstats; wait; done
 
 
 ## (6c) Determine quality control cutoffs for statistics calculated using all reads (bamstats output).
@@ -681,8 +698,9 @@ $ for i in {1..12}; do tail -n+2 /mnt/gs21/scratch/lindero1/atelopus/wgs/mask/fi
 Optional: If the genome is very large sites can be subsampled and still provide an accurate description of genome wide quality metric distributions. The proceeding line of 
 code shows subsampling approximately every 50 sites from the genome-wide bamstats file for computational efficiency:
 
-$ /mnt/ufs18/rs-012/Fitz_Lab/projects/atelopus/atelopus_wgs/variants/mask/scripts/subsamp_sites.pl 0 100000000 /mnt/research/Fitz_Lab/projects/atelopus/atelopus_wgs/variants/mask/bam_stats/atelopus_all_q
-c_genome.bamstats > /mnt/research/Fitz_Lab/projects/atelopus/atelopus_wgs/variants/mask/bam_stats/atelopus_all_qc_genome_subsample.bamstats
+$ /mnt/ufs18/rs-012/Fitz_Lab/projects/atelopus/atelopus_wgs/variants/mask/scripts/subsamp_sites.pl 0 100000000 \
+/mnt/research/Fitz_Lab/projects/atelopus/atelopus_wgs/variants/mask/bam_stats/atelopus_all_qc_genome.bamstats > \
+/mnt/research/Fitz_Lab/projects/atelopus/atelopus_wgs/variants/mask/bam_stats/atelopus_all_qc_genome_subsample.bamstats
 
 
 The following code sections show examples for how I calculate summary statistics based on ("Summarize bam quality metrics" section) and 
@@ -817,7 +835,9 @@ $ for i in {1..12}; do tail -n+2 /mnt/research/Fitz_Lab/projects/atelopus/atelop
 Optional: If the genome is large, sites can be subsampled to characterize genome-wide quality distributions. The following line of code provides 
 an example for subsampling approximately every 42 sites from the genome-wide VCF stats file for computational efficiency.
 
-$ /mnt/ufs18/rs-012/Fitz_Lab/projects/atelopus/atelopus_wgs/variants/mask/scripts/subsamp_sites.pl 0 100000000 /mnt/research/Fitz_Lab/projects/atelopus/atelopus_wgs/variants/mask/vcf_stats/atelopus_all_qc_vcfstats_genome.tsv > /mnt/research/Fitz_Lab/projects/atelopus/atelopus_wgs/variants/mask/vcf_stats/atelopus_all_qc_vcfstats_genome_subsample.tsv
+$ /mnt/ufs18/rs-012/Fitz_Lab/projects/atelopus/atelopus_wgs/variants/mask/scripts/subsamp_sites.pl 0 100000000 \
+/mnt/research/Fitz_Lab/projects/atelopus/atelopus_wgs/variants/mask/vcf_stats/atelopus_all_qc_vcfstats_genome.tsv \
+> /mnt/research/Fitz_Lab/projects/atelopus/atelopus_wgs/variants/mask/vcf_stats/atelopus_all_qc_vcfstats_genome_subsample.tsv
 
 $ sbatch /mnt/research/Fitz_Lab/projects/atelopus/atelopus_wgs/variants/mask/scripts/vcfstats_summary.sh
 implements:
@@ -987,7 +1007,9 @@ quantile(duplr$LRT, seq(from=0.9,to=0.99,by=0.01))
 
 Paste together ngsParalog calcLR output with corresponding deviant SNP p-values
 
-$ paste /mnt/gs21/scratch/lindero1/atelopus/wgs/mask/ignescens_putative_biallelic_snps_duplr_genome.tsv /mnt/gs21/scratch/lindero1/atelopus/wgs/mask/ignescens_putative_biallelic_snps_duplr_genome_pvals.tsv > /mnt/research/Fitz_Lab/projects/atelopus/atelopus_wgs/variants/mask/ngsparalog_analysis/dup_lr/ignescens_putative_biallelic_snps_duplr_genome.tsv
+$ paste /mnt/gs21/scratch/lindero1/atelopus/wgs/mask/ignescens_putative_biallelic_snps_duplr_genome.tsv \
+/mnt/gs21/scratch/lindero1/atelopus/wgs/mask/ignescens_putative_biallelic_snps_duplr_genome_pvals.tsv \
+> /mnt/research/Fitz_Lab/projects/atelopus/atelopus_wgs/variants/mask/ngsparalog_analysis/dup_lr/ignescens_putative_biallelic_snps_duplr_genome.tsv
 
 
 ## (6g) Annotate VCF FILTER and INFO fields with quality control information.
@@ -1024,7 +1046,8 @@ notes:
 
 Log annotation report information
 
-$ for i in {1..12}; do tail -n+5 /mnt/research/Fitz_Lab/projects/atelopus/atelopus_wgs/variants/scripts/annotate_logs/annotate_atelopus_vcf_52475522_${i}.err | grep  -v "hts_idx_check_range" > /mnt/research/Fitz_Lab/projects/atelopus/atelopus_wgs/variants/annotation_report/atelopus_annotation_report_${i}.txt; done
+$ for i in {1..12}; do tail -n+5 /mnt/research/Fitz_Lab/projects/atelopus/atelopus_wgs/variants/scripts/annotate_logs/annotate_atelopus_vcf_52475522_${i}.err \
+| grep  -v "hts_idx_check_range" > /mnt/research/Fitz_Lab/projects/atelopus/atelopus_wgs/variants/annotation_report/atelopus_annotation_report_${i}.txt; done
 
 
 # Concatenate VCFs into a single, genome VCF (optional and only applicable if variant calling was split up into multiple genomic regions)
@@ -1102,7 +1125,8 @@ $ angsd sites index /mnt/research/Fitz_Lab/projects/atelopus/atelopus_wgs/varian
 
 Make list of scaffolds with qc-passed sites that can e.g. be provided to ANGSD -r option in conjuction with -sites input to increase efficiency (optional)
 
-$ cut -f1 /mnt/ufs18/rs-012/Fitz_Lab/projects/atelopus/atelopus_wgs/variants/vcf/qc_sites/sp_comparisons/atelopus_qc_sites_genome.pos | uniq > /mnt/ufs18/rs-012/Fitz_Lab/projects/atelopus/atelopus_wgs/variants/vcf/qc_sites/sp_comparisons/atelopus_qc_sites_genome.rf
+$ cut -f1 /mnt/ufs18/rs-012/Fitz_Lab/projects/atelopus/atelopus_wgs/variants/vcf/qc_sites/sp_comparisons/atelopus_qc_sites_genome.pos \
+| uniq > /mnt/ufs18/rs-012/Fitz_Lab/projects/atelopus/atelopus_wgs/variants/vcf/qc_sites/sp_comparisons/atelopus_qc_sites_genome.rf
 
 
 # Extract positions of high-quality biallelic SNPs
@@ -1144,4 +1168,5 @@ $ angsd sites index /mnt/ufs18/rs-012/Fitz_Lab/projects/atelopus/atelopus_wgs/va
 
 Make list of scaffolds that contain qc-passed SNPs (optional)
 
-$ cut -f1 /mnt/ufs18/rs-012/Fitz_Lab/projects/atelopus/atelopus_wgs/variants/vcf/qc_snps/sp_comparisons/atelopus_qc_snps_genome.pos | uniq > /mnt/ufs18/rs-012/Fitz_Lab/projects/atelopus/atelopus_wgs/variants/vcf/qc_snps/sp_comparisons/atelopus_qc_snps_genome.rf
+$ cut -f1 /mnt/ufs18/rs-012/Fitz_Lab/projects/atelopus/atelopus_wgs/variants/vcf/qc_snps/sp_comparisons/atelopus_qc_snps_genome.pos \
+| uniq > /mnt/ufs18/rs-012/Fitz_Lab/projects/atelopus/atelopus_wgs/variants/vcf/qc_snps/sp_comparisons/atelopus_qc_snps_genome.rf

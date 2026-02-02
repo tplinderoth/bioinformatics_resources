@@ -36,9 +36,7 @@
 #! Don't put any #SBATCH directives below this line
 
 #! Modify the environment seen by the application. For this example we need the default modules.
-#! . /etc/profile.d/modules.sh                # This line enables the module command
 #! module purge                               # Removes all modules still loaded
-#! module load rhel7/default-peta4            # REQUIRED - loads the basic environment
 
 #! Are you using OpenMP (NB this is unrelated to OpenMPI)? If so increase this
 #! export OMP_NUM_THREADS=1
@@ -47,25 +45,22 @@
 #! In this example, each job will be passed its index, so each output file will contain a different value
 echo "This is job" $SLURM_ARRAY_TASK_ID
 
-#! Command line that we want to run:
-#! jobDir=Job_$SLURM_ARRAY_TASK_ID
-#! mkdir $jobDir
-#! cd $jobDir
-
 workdir="$SLURM_SUBMIT_DIR" # The value of SLURM_SUBMIT_DIR sets workdir to the directory
 cd $workdir
 
-EXEC='/mnt/research/Fitz_Lab/projects/atelopus/atelopus_wgs/map/scripts/map_reads.sh'
+EXEC='/mnt/research/Fitz_Lab/workflows/bioinformatics_resources/variant_calling/scripts/map_reads.sh'
 REF='/mnt/research/Fitz_Lab/ref/frog/atelopus_ignescens/AteIgnes.fasta'
-IDLIST='/mnt/research/Fitz_Lab/projects/atelopus/atelopus_wgs/metadata/atelopus_wgs_specimen_id.txt' # tab-delimited list of samples (one per row) with columns (1) sample ID, (2) sample library
-FQDIR='/mnt/gs21/scratch/lindero1/atelopus/wgs/resplit'
-OUTDIR='/mnt/gs21/scratch/lindero1/atelopus/wgs/untrimmed_bam'
-SEQPLATFORM='Illumina'
-SAMPID=$(sed -n "${SLURM_ARRAY_TASK_ID}p" "$IDLIST" | cut -f1)
-SAMPLIB=$(sed -n "${SLURM_ARRAY_TASK_ID}p" "$IDLIST" | cut -f2)
-NTHREAD=10
+FQDIR='/mnt/gs21/scratch/lindero1/atelopus/mt_genomes/fastq/platform_merged'
+SAMPLIST="/mnt/research/Fitz_Lab/projects/atelopus/atelopus_wgs/metadata/atelopus_wgs_metadata_qcpass.tsv" # TSV file containing a header and sample IDs (in column 2), library IDs (4), and species (5)
+SAMPID=$(tail -n+2 $SAMPLIST | sed -n "${SLURM_ARRAY_TASK_ID}p" | cut -f2)
+SAMPLIB=$(tail -n+2 $SAMPLIST | sed -n "${SLURM_ARRAY_TASK_ID}p" | cut -f4)
+SPECIES=$(tail -n+2 $SAMPLIST | sed -n "${SLURM_ARRAY_TASK_ID}p" | cut -f5)
+PLAT="ILLUMINA+AVITI"
+DESCRIP="'Whole genome sequencing data for $SPECIES'"
+OUTPREFIX="$SAMPID"
+OUTDIR="/mnt/gs21/scratch/lindero1/atelopus/bams"
+NTHREAD=18
 
-CMD="$EXEC --ref $REF --$SAMPID $SAMPID --infq_dir $FQDIR --outdir $OUTDIR --sample_lib $SAMPLIB --name_mod qcpass --platform $SEQPLATFORM \
---ds 'Atelopus toad whole genome sequencing data produced by the Michigan State University RTSF Genomics Core, project JAY14502 KEJ_Atelopus_WG_RR_2023' --threads $NTHREAD"
+CMD="$EXEC --ref $REF --infq_dir $FQDIR --sample_id $SAMPID --platform $PLAT --ds $DESCRIP --name_mod qcpass --outdir $OUTDIR --outprefix $OUTPREFIX --threads $NTHREAD"
 printf "\n%s\n" "$CMD"
 eval $CMD
