@@ -1,6 +1,6 @@
 #!/usr/bin/perl
 
-#rescueUnpaired.pol
+#rescueUnpaired.pl v. 0.0.2
 
 use warnings;
 use strict;
@@ -47,18 +47,30 @@ die("Error: Invalid minimum read length, $minlen\n") if ($minlen < 1);
 my $outfh = new IO::Compress::Gzip($outname) or die("Error: Unable to open output file -> $GzipError\n");
 
 foreach my $infile (@fqfiles) {
-	my $fh = fileopen($infile);
+	my $zip;
+	my $fh = fileopen($infile, \$zip);
+	my $buffer;
 	die("Error: Unable to open input fastq $infile\n") if (!$fh);
 
 	do {
-		chomp(my $header = <$fh>);
-		chomp(my $seq = <$fh>);
-		chomp(my $opt = <$fh>);
-		chomp(my $qual = <$fh>);
-		if (length($seq) >= $minlen) {
-			print $outfh "$header\n$seq\n$opt\n$qual\n";
+		my $header = <$fh>;
+		if ($header) {
+			chomp($header);
+			chomp(my $seq = <$fh>);
+			chomp(my $opt = <$fh>);
+			chomp(my $qual = <$fh>);
+			if (length($seq) >= $minlen) {
+				print $outfh "$header\n$seq\n$opt\n$qual\n";
+			}
+		} else {
+			last if eof($fh);
+			# If the sequence/base quality string length is zero at the end of a gzipped file, the eof method is unreliable, 
+			# therefore, test for any empty header string, which should always be nonempty in a correctly formatted fastq, and then
+			# exit normally if eof is true. If a nonempty header is found before the end of the fastq file, somethig must be
+			# wrong with the fastq.
+			die ("Error: $infile format appears incorrect\n");
 		}
-	} while (!eof $fh);
+	} while (1);
 
 	close $fh;
 }
@@ -68,18 +80,22 @@ close $outfh;
 ### subroutines ###
 
 sub fileopen {
+	my ($f, $iszip) = @_;
         my $fh = undef;
-        if(open($fh, '<', $_[0])) {
+        if(open($fh, '<', $f)) {
                 sysread $fh, my $magic, 2;
                 close $fh;
         if ($magic eq "\x1f\x8b") {
                 $fh = new IO::Zlib;
-                $fh->open($_[0], "rb");
+                $fh->open($f, "rb");
+		$$iszip = 1;
         } else {
-                open($fh, '<', $_[0]);
+                open($fh, '<', $f);
+		$$iszip = 0;
                 }
         } else {
                 print STDERR "Error: Unable to open file $_[0]\n";
+		$$iszip = -1;
                 return 0;
         }
         return $fh;
