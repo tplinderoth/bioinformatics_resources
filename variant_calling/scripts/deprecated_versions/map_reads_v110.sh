@@ -2,7 +2,7 @@
 
 # map_reads.sh
 
-VERSION='1.1.1'
+VERSION='1.1.0'
 NTHREAD=1
 REF=''
 SAMPLE_ID=''
@@ -191,9 +191,9 @@ do
 		lstart=$((lstart + 4))
 		lend=$((lstart + 1))
 		readheader=$(zcat "$FWDFQ" | sed -n "${lstart}p;${lend}q" | sed 's/ [[:digit:]]//')
-		readinfo=($(echo "$readheader" | perl -e 'chomp($read = <>); @arr = split(/:/,$read); print "@arr[1,2,3,$#arr]";'))
-		barcode=$(sed 's/+/-/' <<< "${readinfo[3]}")
-		readgroup="@RG\tID:${readinfo[0]}.${readinfo[1]}.${readinfo[2]}\tBC:${barcode}\tPU:${readinfo[1]}.${readinfo[2]}\tSM:${SAMPLE_ID}"
+		readinfo=($(echo "$readheader" | perl -e 'chomp($read = <>); @arr = split(/:/,$read); print "@arr[2,3,$#arr]";'))
+		barcode=$(sed 's/+/-/' <<< "${readinfo[2]}")
+		readgroup="@RG\tID:${readinfo[0]}.${readinfo[1]}\tBC:${barcode}\tPU:${readinfo[0]}.${readinfo[1]}.${barcode}\tSM:${SAMPLE_ID}"
 
 		if [ "$readgroup" = "$prevrg" ] && ! [[ "$barcode" =~ 'N' ]]; then ((nmatch++)); fi
 		prevrg="$readgroup"
