@@ -49,7 +49,6 @@ my $outfh = new IO::Compress::Gzip($outname) or die("Error: Unable to open outpu
 foreach my $infile (@fqfiles) {
 	my $zip;
 	my $fh = fileopen($infile, \$zip);
-	my $buffer;
 	die("Error: Unable to open input fastq $infile\n") if (!$fh);
 
 	do {
