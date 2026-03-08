@@ -5,7 +5,7 @@ This documents step-by-step how to identify genetic variants from population NGS
 The example code in this document pulls from multiple different studies to reflect the most up-to-date approaches 
 for data processing.
 
-Lines prefixed with '$' denote bash code.
+Lines prefixed with "$" denote bash code. Lines within "```" (3 back ticks) denote multi-line code.
 
 
 ## ---------- RAW FASTQ QUALITY CONTROL ---------- ##
@@ -13,10 +13,9 @@ Lines prefixed with '$' denote bash code.
 ## (1a) Assess quality of raw fastq data using the program fastQC.
 
 $ sbatch /mnt/research/Fitz_Lab/projects/mosaic/fastq/raw_data/qc/fastqc_array.sh
-implements:
+bash code:
 
---- start bash code ---
-
+```
 EXEC='fastqc'
 ADAPTERFILE='/mnt/research/Fitz_Lab/projects/mosaic/raw_data/qc/novogene_adapter_file.txt'
 FQLIST='/mnt/research/Fitz_Lab/projects/mosaic/raw_data/raw_fastq_list.txt'
@@ -29,7 +28,7 @@ printf "\n%s\n\n" "$CMD"
 
 eval $CMD
 
---- end bash code ---
+```
 
 
 ## (1b) Collate reads by sample. This is only necessary if the same individual/library was sequenced using 
@@ -37,10 +36,9 @@ eval $CMD
 ## identify PCR duplicates.
 
 $ sbatch /mnt/research/Fitz_Lab/projects/mosaic/fastq/process_reads/cat_runs/cat_fastq_array.sh
-implements:
+bash code:
 
---- start bash code ---
-
+```
 EXEC='/mnt/research/Fitz_Lab/projects/mosaic/processed_reads/cat_runs/catFastq.sh'
 DIRLIST='/mnt/research/Fitz_Lab/projects/mosaic/processed_reads/cat_runs/fastq_dirs.txt'
 FQDIR=$(sed -n "${SLURM_ARRAY_TASK_ID}p" "$DIRLIST")
@@ -51,7 +49,7 @@ printf "\n%s\n\n" "$CMD"
 
 eval $CMD
 
---- end bash code ---
+```
 
 Now each sample/library should have one file of forward reads and one file of reverse reads.
 
@@ -59,10 +57,9 @@ Now each sample/library should have one file of forward reads and one file of re
 ## (1c) Remove PCR and optical duplicate reads (reference-free approach). 
 
 $ sbatch /mnt/research/Fitz_Lab/projects/atelopus/atelopus_wgs/clean_data/scripts/deduplicate_reads_array.sh
-implements:
+bash code:
 
---- start bash code ---
-
+```
 EXEC='hts_SuperDeduper'
 INDLIST='/mnt/research/Fitz_Lab/projects/atelopus/atelopus_wgs/metadata/atelopus_wgs_seqid.txt'
 IND=$(sed -n "${SLURM_ARRAY_TASK_ID}p" "$INDLIST")
@@ -77,7 +74,7 @@ printf "\n%s\n\n" "$CMD"
 
 eval $CMD
 
---- end bash code ---
+```
 
 
 # Use the stats output of hts_SuperDeduper to obtain pre-filtered read data (number of read pairs and bases) since this is the first filtering step.
@@ -95,10 +92,9 @@ If data were produced on a 2-color sequencing platform and poly-G trimming is ne
 Note that --discard-casava can optionally be evoked to remove reads that fail casava filters.
 
 $ sbatch /mnt/research/Fitz_Lab/projects/atelopus/atelopus_wgs/clean_data/scripts/trim_adapters_array.sh
-implements:
+bash code:
 
---- start bash code ---
-
+```
 EXEC='cutadapt'
 INDLIST='/mnt/research/Fitz_Lab/projects/atelopus/atelopus_wgs/metadata/atelopus_wgs_seqid.txt'
 FQDIR='/mnt/gs21/scratch/lindero1/atelopus/wgs/deduplicate_fastq'
@@ -116,7 +112,7 @@ printf "\n%s\n\n" "$CMD"
 
 eval $CMD
 
---- end bash code ---
+```
 
 
 If Poly-G trimming is unnecessary (step 1e) this is the final pre-mapping fastq quality control step. In this case, use the following script/code
@@ -171,10 +167,9 @@ The trim_polyg_array.sh script also formats fastq names to <specimen_id>_<librar
 by mapping wrapper script.
 
 $ sbatch /mnt/research/Fitz_Lab/projects/atelopus/atelopus_wgs/clean_data/scripts/trim_polyg_array.sh
-implements:
+bash code:
 
---- start bash code ---
-
+```
 EXEC='fastp'
 INDLIST='/mnt/research/Fitz_Lab/projects/atelopus/atelopus_wgs/clean_data/trim_polyg/trim_polyg_sample_list.txt'
 FQDIR='/mnt/gs21/scratch/lindero1/atelopus/wgs/trim_adapters'
@@ -206,7 +201,7 @@ printf "\n%s\n\n" "$CMD"
 
 eval $CMD
 
---- end bash code ---
+```
 
 
 # Extract stats on the number of reads that passed quality control prior to mapping
@@ -220,10 +215,9 @@ $ while read -r ID; do INFILE="/mnt/research/Fitz_Lab/projects/atelopus/atelopus
 ## still included the below code to provide an example of parameterization if this is ever necessary.
 
 $ /mnt/research/Fitz_Lab/projects/mosaic/fastq/process_reads/merge/merge_reads_array.sh
-implements:
+bash code:
 
---- start bash code ---
-
+```
 EXEC='pear'
 FQLIST='/mnt/research/Fitz_Lab/projects/mosaic/mosiac_samples.txt'
 FQDIR='/mnt/gs18/scratch/users/lindero1/mosaic/adapter_trim'
@@ -238,17 +232,16 @@ printf "\n%s\n\n" "$CMD"
 
 eval $CMD
 
---- end bash code ---
+```
 
 
 ## (1g) Determine the amount of read data removed by quality controls (before trimming overlapping read pairs), the percentage of missing bases, 
 ## and the distribution of quality controlled read lengths. This step is optional. The amount of data before and after QC is also provided by code in steps 1c and 1e.
 
 $ sbatch /mnt/research/Fitz_Lab/projects/mosaic/fastq/process_reads/clean_eval/eval_array.sh
-implements:
+bash code:
 
---- start bash code ---
-
+```
 EXEC='/mnt/research/Fitz_Lab/projects/mosaic/fastq/process_reads/clean_eval/evalLibs.pl'
 FQLIST='/mnt/research/Fitz_Lab/projects/mosaic/mosiac_samples.txt'
 CLEAN_FQDIR='/mnt/research/Fitz_Lab/projects/mosaic/fastq/clean_reads'
@@ -266,29 +259,35 @@ printf "\n%s\n\n" "$CMD"
 
 eval $CMD
 
---- end bash code ---
+```
 
 
 ## (1h) Split quality-controlled fastq files back into separate lanes so that batch information can be incorporated into the BAM files.
-## This is only necessary if libraries were sequenced on multiple lanes. Note that for files sequenced using one lane, the lane number must  
-## still be incorporated into fastq name for the map_reads.sh script (see section 2b).
 
-$ sbatch /mnt/research/Fitz_Lab/projects/atelopus/atelopus_wgs/clean_data/scripts/split_reads_array.sh
-implements:
+The split_fastq_batches.pl script will append '_<batch number>_R<1|2>.fastq.gz' for paired end reads or '_<batch number>_U.fastq.gz'
+for unpaired reads to the end of the fastq file names to ensure proper formating for the map_reads.sh script (see step 2b of mapping section below).
 
---- start bash code ---
+$ sbatch /mnt/research/Fitz_Lab/projects/msb/scripts/split_fastq_batches_array.sh
+bash code:
 
-EXEC='/mnt/research/Fitz_Lab/projects/atelopus/atelopus_wgs/clean_data/scripts/splitFastqLanes.pl'
-FQLIST='/mnt/research/Fitz_Lab/projects/atelopus/atelopus_wgs/clean_data/trim_polyg/trim_polyg_sample_list.txt'
-FQDIR='/mnt/gs21/scratch/lindero1/atelopus/wgs/trim_polyg'
-OUTDIR='/mnt/gs21/scratch/lindero1/atelopus/wgs/resplit'
-FQPREFIX=$(sed -n "${SLURM_ARRAY_TASK_ID}p" "$FQLIST" | cut -f1,2 | sed 's/\t/_/' | sed 's/$/_qcpass/')
+```
+EXEC='/mnt/research/Fitz_Lab/projects/msb/scripts/split_fastq_batches.pl'
+SAMP_LIST="/mnt/research/Fitz_Lab/projects/msb/metadata/msb_libraries_unique.tsv"
+SAMPID=$(tail -n+2 $SAMP_LIST | sed -n "${SLURM_ARRAY_TASK_ID}p" | cut -f1)
+TISSUE=$(tail -n+2 $SAMP_LIST | sed -n "${SLURM_ARRAY_TASK_ID}p" | cut -f2)
+FQFWD="/mnt/gs21/scratch/lindero1/msb/fastq/trim_adapters/${SAMPID}_qcpass_R1.fastq.gz"
+FQREV="/mnt/gs21/scratch/lindero1/msb/fastq/trim_adapters/${SAMPID}_qcpass_R2.fastq.gz"
+FQU="/mnt/gs21/scratch/lindero1/msb/fastq/trim_adapters/${SAMPID}_qcpass_U.fastq.gz"
+LIB="CSM.${SAMPID}.${TISSUE}"
+OUT="/mnt/gs21/scratch/lindero1/msb/fastq/batch_split/${SAMPID}_${LIB}_qcpass"
 
-CMD="$EXEC $FQPREFIX $FQDIR $OUTDIR"
-printf "\n%s\n" "$CMD"
+CMD="$EXEC --pe $FQFWD $FQREV --single $FQU --outprefix $OUT"
+
+printf "\n%s\n\n" "$CMD"
+
 eval $CMD
 
---- end bash code ---
+```
 
 
 #
@@ -315,7 +314,9 @@ The mapping script looks for all fastq files for a sample, and specific library 
 and maps them to the reference genome with bwa-mem, producing one BAM per sample/library.
 
 The input fastq files must be gzipped and named according to
-<sample id>[_sample library][_extra name modifiers][_batch number]_R1|2.fastq.gz
+<sample id>[_sample library][_extra name modifiers][_batch number]_R<1|2>.fastq.gz for paired-end data
+or
+<sample id>[_sample library][_extra name modifiers][_batch number]*.fastq.gz for single-end data.
 
 Optional parts of the fastq file names are contained in square brackets, so the only required part of the name before the
 _R1|2.fastq.gz suffix is the sample ID. If the fastq files contain the sample library in their names, this can be provided with
@@ -336,6 +337,10 @@ The final output BAM file for each sample/library will be called <outprefix>_unt
 By default the outfile prefix is <sample_ID>[_sample library], noting that the library is only included by default if supplied with --sample_lib and
 present in the input fastq file name.
 
+If you need to map both paired and unpaired data, you need to run the mapping script separately for these two data types. Also,
+due to how the script looks for single-end (unpaired) data, you need to keep paired and unpaired data in separate directories if 
+mapping unpaired data.
+
 Run the map_reads.sh script without arguments to print a full set of help information and input options.
 
 !!! Remember to index your reference genome with bwa index before running this script!
@@ -343,10 +348,9 @@ Run the map_reads.sh script without arguments to print a full set of help inform
 Example for running map_reads.sh as an array job:
 
 $ sbatch /mnt/research/Fitz_Lab/projects/atelopus/atelopus_wgs/map/scripts/map_reads_array.sh
-implements:
+bash code:
 
---- start bash code ---
-
+```
 EXEC='/mnt/research/Fitz_Lab/workflows/bioinformatics_resources/variant_calling/scripts/map_reads.sh'
 REF='/mnt/research/Fitz_Lab/ref/frog/atelopus_ignescens/AteIgnes.fasta'
 FQDIR='/mnt/gs21/scratch/lindero1/atelopus/mt_genomes/fastq/platform_merged'
@@ -364,7 +368,7 @@ CMD="$EXEC --ref $REF --infq_dir $FQDIR --sample_id $SAMPID --platform $PLAT --d
 printf "\n%s\n" "$CMD"
 eval $CMD
 
---- end bash code ---
+```
 
 
 #
@@ -377,10 +381,9 @@ eval $CMD
 ## (3a) Clip overlapping reads and retain only properly paired reads.
 
 $ sbatch /mnt/research/Fitz_Lab/projects/atelopus/atelopus_wgs/map/scripts/clip_overlaps_array.sh
-implements:
+bash code:
 
---- start bash code ---
-
+```
 EXEC='bam clipOverlap'
 IDLIST='/mnt/research/Fitz_Lab/projects/atelopus/atelopus_wgs/metadata/atelopus_wgs_specimen_id.txt'
 SAMPID=$(sed -n "${SLURM_ARRAY_TASK_ID}p" "$IDLIST")
@@ -396,7 +399,7 @@ CMD2="samtools index -c -@ $NTHREAD $OUTBAM"
 printf "\n%s\n" "$CMD2"
 eval $CMD2
 
---- end bash code ---
+```
 
 ## (3b) make list of BAMs for which the overlapping read pairs have been trimmed. These are the quality-controlled BAMs used for variant calling.
 
@@ -445,10 +448,10 @@ Aternativley (or in addtion), you can generate coverage statistics for only the 
 can be used to assign sex based on the depth of coverage ratio between autosomes and sex chromosomes. Below is an example for 
 Florida Scrub-Jays:
 
-Calculate Z chromosome to autosome depth ratio for each individual using the zchr_depth_ratio.R script, which implements:
+Calculate Z chromosome to autosome depth ratio for each individual using the zchr_depth_ratio.R script.
+R code:
 
---- start R code ---
-
+```
 homolog_file = '/mnt/research/Fitz_Lab/ref/bird/FSJ_V3/FSJV3_convert.short.txt'
 homolog = read.table(homolog_file,head=TRUE)
 autosome = homolog$FSJV3_SCAFFOLD[which(homolog$ZEBRA_FINCH_CHR != "Z")]
@@ -478,7 +481,7 @@ df$NGS_SEX[which(is.na(df$NGS_SEX) == TRUE)] = "Male"
 # write output
 # write.table(df,file='/mnt/research/Fitz_Lab/projects/mosaic/map/coverage/ngs_sex_assignment.txt',col.names=TRUE,row.names=FALSE,sep="\t",quote=FALSE)
 
---- end R code ---
+```
 
 
 #
@@ -495,10 +498,9 @@ that I use for downstream quality control. BCFtools norm left-aligns and normali
 genome.
 
 $ sbatch /mnt/research/Fitz_Lab/projects/atelopus/atelopus_wgs/variants/scripts/call_atelopus_variants_array.sh
-implements:
+bash code:
 
---- start bash code ---
-
+```
 REF='/mnt/research/Fitz_Lab/ref/frog/atelopus_ignescens/AteIgnes.fasta'
 BAMS='/mnt/research/Fitz_Lab/projects/atelopus/atelopus_wgs/map/atelopus_filtered_bam_list.txt'
 SCAFFLIST="/mnt/research/Fitz_Lab/projects/atelopus/atelopus_wgs/variants/scaffold_sets/AteIgnes_${SLURM_ARRAY_TASK_ID}.rf"
@@ -552,7 +554,7 @@ tabix -p bcf $OUTBCF
 
 printf "\nfinished\n"
 
---- end bash code ---
+```
 
 
 Notes: The above variant identification code calls variants for chunks of the genome in parallel for efficiency (via the -R option). If the
@@ -630,10 +632,9 @@ This is necessary because bamstats can only take a single bam file as input (it 
 for cases involving many samples to the point that I/O operations become very slow).
 
 $ sbach /mnt/research/Fitz_Lab/projects/atelopus/atelopus_wgs/variants/mask/scripts/merge_atelopus_qc_bams.sh
-implements:
+bash code:
 
---- begin bash code ---
-
+```
 REF='/mnt/research/Fitz_Lab/ref/frog/atelopus_ignescens/AteIgnes.fasta'
 BAMS='/mnt/research/Fitz_Lab/projects/atelopus/atelopus_wgs/map/atelopus_filtered_bam_list.txt'
 OUTFILE='/mnt/gs21/scratch/lindero1/atelopus/wgs/mask/atelopus_all_qc_merged.bam'
@@ -652,7 +653,7 @@ wait
 
 samtools quickcheck $OUTFILE && echo 'BAM PASSED QUICKCHECK' || 'BAM FAILED QUICKCHECK'
 
---- end bash code ---
+```
 
 
 ## (6b) Calculate mapping, base quality, and depth statistics for each site in the reference genome based on all read data in the multi-sample BAM.
@@ -660,10 +661,9 @@ samtools quickcheck $OUTFILE && echo 'BAM PASSED QUICKCHECK' || 'BAM FAILED QUIC
 The bamstats program is available at https://github.com/tplinderoth/ngsQC/tree/master/bamstats
 
 $ sbatch /mnt/research/Fitz_Lab/projects/atelopus/atelopus_wgs/variants/mask/scripts/calc_atelopus_bam_stats_array.sh
-implements:
+bash code:
 
---- start bash code ---
-
+```
 EXEC='/mnt/research/Fitz_Lab/software/bin/bamstats'
 SCAFLIST="/mnt/research/Fitz_Lab/projects/atelopus/atelopus_wgs/variants/scaffold_sets/AteIgnes_scaffolds_${SLURM_ARRAY_TASK_ID}.txt"
 REF='/mnt/research/Fitz_Lab/ref/frog/atelopus_ignescens/AteIgnes.fasta'
@@ -681,7 +681,7 @@ do
 done < $SCAFLIST
 wait
 
---- end bash code ---
+```
 
 
 Optional: concatenate regional bamstats output into a single genome-wide bamstats output file.
@@ -710,10 +710,9 @@ genome-wide quality metric distributions to decide on hard quality-cutoff values
 # Summarize bam quality metrics
 
 $ /mnt/research/Fitz_Lab/projects/atelopus/atelopus_wgs/variants/mask/scripts/bamstats_summary.sh
-implements:
+bash code:
 
---- start bash code ---
-
+```
 EXEC='/mnt/research/Fitz_Lab/projects/atelopus/atelopus_wgs/variants/mask/scripts/qualSummaryStats.R'
 STATLIST='/mnt/research/Fitz_Lab/projects/atelopus/atelopus_wgs/variants/mask/bam_stats/atelopus_all_bamstats_subsample_list.txt'
 OUTFILE='/mnt/research/Fitz_Lab/projects/atelopus/atelopus_wgs/variants/mask/bam_stats/atelopus_all_qc_genome_subsample_bamstats_summary.tsv'
@@ -724,13 +723,14 @@ printf "\n%s\n\n" "$CMD"
 
 eval $CMD
 
---- end bash code ---
+```
 
 
 # Visualize bamstats distributions
 
---- start R code ---
+R code:
 
+```
 bamstats <- read.table('/mnt/research/Fitz_Lab/projects/atelopus/atelopus_wgs/variants/mask/bam_stats/atelopus_all_qc_genome_subsample.bamstats', head=TRUE)
 bamstats$rms_baseq = as.numeric(bamstats$rms_baseq)
 bamstats$depth = as.numeric(bamstats$depth)
@@ -762,7 +762,7 @@ abline(v=0.1,col="red")
 
 dev.off()
 
---- end R code ---
+```
 
 
 ## (6d) Generate genomic masks using the quality cutoffs determined from step 6c.
@@ -771,10 +771,9 @@ I tend to apply a minimum root mean square (RMS) map quality filter of 35 and mi
 of what the distributions of map and base qualities look like.
 
 $ sbatch /mnt/research/Fitz_Lab/projects/atelopus/atelopus_wgs/variants/mask/scripts/bamstats_mask_array.sh
-implements:
+bash code:
 
---- start bash code ---
-
+```
 EXEC='/mnt/research/Fitz_Lab/projects/atelopus/atelopus_wgs/variants/mask/scripts/bedmask.pl'
 STATFILE="/mnt/research/Fitz_Lab/projects/atelopus/atelopus_wgs/variants/mask/bam_stats/atelopus_all_qc_${SLURM_ARRAY_TASK_ID}.bamstats"
 OUTPREFIX="/mnt/research/Fitz_Lab/projects/atelopus/atelopus_wgs/variants/mask/bam_stats/atelopus_all_qc_bamstats_mask_${SLURM_ARRAY_TASK_ID}"
@@ -786,7 +785,7 @@ printf "\n%s\n\n" "$CMD"
 
 eval $CMD
 
---- end bash code ---
+```
 
 
 Optional: The following two lines of code are used to concatenate regional accessability masks into genome-wide mask files
@@ -807,10 +806,9 @@ yielding addtional QC cutoffs based on the subset of data used for variant ident
 # Extract VCF mapping quality, base quality, depth, allelic bias, variant quality, and excess heterozygosity information for each site
 
 $ sbatch /mnt/research/Fitz_Lab/projects/atelopus/atelopus_wgs/variants/mask/scripts/vcfstats_array.sh
-implements:
+bash code:
 
---- start bash code ---
-
+```
 BCF="/mnt/gs21/scratch/lindero1/atelopus/wgs/variants/atelopus_${SLURM_ARRAY_TASK_ID}.bcf.gz"
 OUTFILE="/mnt/gs21/scratch/lindero1/atelopus/wgs/mask/atelopus_all_qc_vcfstats_${SLURM_ARRAY_TASK_ID}.tsv"
 
@@ -820,7 +818,7 @@ printf "\n%s\n\n" "$CMD"
 
 eval $CMD
 
---- end bash code ---
+```
 
 
 Cocatenate regional VCF quality stats files into a single, genome-wide file
@@ -840,10 +838,9 @@ $ /mnt/ufs18/rs-012/Fitz_Lab/projects/atelopus/atelopus_wgs/variants/mask/script
 > /mnt/research/Fitz_Lab/projects/atelopus/atelopus_wgs/variants/mask/vcf_stats/atelopus_all_qc_vcfstats_genome_subsample.tsv
 
 $ sbatch /mnt/research/Fitz_Lab/projects/atelopus/atelopus_wgs/variants/mask/scripts/vcfstats_summary.sh
-implements:
+bash code:
 
---- start bash code ---
-
+```
 EXEC='/mnt/research/Fitz_Lab/projects/atelopus/atelopus_wgs/variants/mask/scripts/qualSummaryStats.R'
 STATLIST='/mnt/research/Fitz_Lab/projects/atelopus/atelopus_wgs/variants/mask/vcf_stats/atelopus_all_qc_vcfstats_subsample_list.txt'
 OUTFILE='/mnt/research/Fitz_Lab/projects/atelopus/atelopus_wgs/variants/mask/vcf_stats/atelopus_all_qc_genome_subsample_vcfstats_summary.tsv'
@@ -852,16 +849,16 @@ CMD="$EXEC $STATLIST $OUTFILE 3 4 5 6 7 8 9 10 11 12 13 14 15"
 
 printf "\n%s\n\n" "$CMD"
 
---- end bash code ---
+```
 
 
 # Visualize the genome-wide distributions of VCF quality metrics
 
 In the example below I am only concerned about depth of coverage. When appropriate, I will filter based on additional 
 VCF quality metrics like excess heterozygosity (in which case visualizing those distributions is necessary).
+R code:
 
---- start R code ---
-
+```
 vcfstats <- read.table('/mnt/research/Fitz_Lab/projects/atelopus/atelopus_wgs/variants/mask/vcf_stats/atelopus_all_qc_vcfstats_genome_subsample.tsv',head=TRUE)
 
 # plot
@@ -878,7 +875,7 @@ hist(vcfstats$NS, xlab="INFO/NS", ylab="Number of sites", main=NULL, breaks=50)
 
 dev.off()
 
---- end R code ---
+```
 
 
 ## (6f) Identify genomic regions refractory to short read mapping with ngsParalog.
@@ -890,10 +887,9 @@ genome assembly.
 # extract putative, segregating, biallelic SNP positions
 
 $ sbatch /mnt/research/Fitz_Lab/projects/atelopus/atelopus_wgs/variants/mask/scripts/extract_putative_ignescens_snps.sh
-implements:
+bash code:
 
---- start bash code ---
-
+```
 SAMPFILE='/mnt/research/Fitz_Lab/projects/atelopus/atelopus_wgs/metadata/atelopus_wgs_qcpass_ignescens_id.txt'
 BCF="/mnt/gs21/scratch/lindero1/atelopus/wgs/variants/atelopus_${SLURM_ARRAY_TASK_ID}.bcf.gz"
 OUTFILE="/mnt/research/Fitz_Lab/projects/atelopus/atelopus_wgs/variants/mask/ngsparalog_analysis/atelopus_ignescens_putative_biallelic_snps_${SLURM_ARRAY_TASK_ID}.pos"
@@ -904,13 +900,14 @@ printf "\n%s\n\n" "$CMD"
 
 eval $CMD
 
---- end bash code ---
+```
 
 
 # Optional: Subdivide SNP sites files into multiple files for more parallelization (because ngsParalog can take a long time to run otherwise).
 
---- start R code ---
+R code:
 
+```
 cutoff = 2999999
 
 prefix='/mnt/research/Fitz_Lab/projects/atelopus/atelopus_wgs/variants/mask/ngsparalog_analysis/sites/pos_split1/atelopus_ignescens_putative_biallelic_snps_'
@@ -937,7 +934,7 @@ for (i in 1:12) {
         }
 }
 
---- end R code ---
+```
 
 
 # Calculate likelihood ratio that reads covering a site derive from multiple regions in the genome (run ngsParalog)
@@ -945,10 +942,9 @@ for (i in 1:12) {
 ngsParalog is available at https://github.com/tplinderoth/ngsParalog
 
 $ sbatch /mnt/research/Fitz_Lab/projects/atelopus/atelopus_wgs/variants/mask/scripts/ngsparalog_calcLR_array.sh
-implements:
+bash code:
 
---- start bash code ---
-
+```
 EXEC='/mnt/research/Fitz_Lab/software/ngsParalog/ngsParalog'
 REF='/mnt/research/Fitz_Lab/ref/frog/atelopus_ignescens/AteIgnes.fasta'
 BAM='/mnt/research/Fitz_Lab/projects/atelopus/atelopus_wgs/map/ignescens_filtered_bam_list.txt'
@@ -965,7 +961,7 @@ printf "\n%s\n\n" "$CMD"
 
 eval $CMD
 
---- end bash code ---
+```
 
 
 optional: Combine regional calcLR output files into a single, genome-wide file of deviant SNP likelihood ratios
@@ -979,8 +975,9 @@ $ for i in {1..1799}; do cat /mnt/research/Fitz_Lab/projects/atelopus/atelopus_w
 
 # Calculate p-values for deviant SNP LRT statistics and determine filtering cutoff
 
---- start R code ---
+R code:
 
+```
 duplr <- read.table('/mnt/gs21/scratch/lindero1/atelopus/wgs/mask/ignescens_putative_biallelic_snps_duplr_genome.tsv', colClass=c(rep("NULL",4),"numeric"), head=TRUE)
 duplr$PVAL = 0.5*pchisq(duplr$LRT,df=1,lower.tail=FALSE)
 duplr$PVAL_ADJUST = p.adjust(duplr$PVAL, method="bonferroni")
@@ -1002,7 +999,7 @@ quantile(duplr$LRT, seq(from=0.9,to=0.99,by=0.01))
 #     98%      99% 
 #63.05562 86.40903
 
---- end R code ---
+```
 
 
 Paste together ngsParalog calcLR output with corresponding deviant SNP p-values
@@ -1017,10 +1014,9 @@ $ paste /mnt/gs21/scratch/lindero1/atelopus/wgs/mask/ignescens_putative_bialleli
 The final VCF produced by this step is suitable for public release and use in downstream analyses.
 
 $ sbatch /mnt/research/Fitz_Lab/projects/atelopus/atelopus_wgs/variants/scripts/annotate_atelopus_vcf_array.sh
-implements:
+bash code:
 
---- start bash code ---
-
+```
 EXEC='/mnt/research/Fitz_Lab/projects/atelopus/atelopus_wgs/variants/scripts/annotate_vcf.pl'
 BCF="/mnt/gs21/scratch/lindero1/atelopus/wgs/variants/atelopus_${SLURM_ARRAY_TASK_ID}.bcf.gz"
 BEDMASK='/mnt/research/Fitz_Lab/projects/atelopus/atelopus_wgs/variants/mask/bam_stats/atelopus_all_qc_bamstats_mask_genome_fail.bed'
@@ -1037,7 +1033,7 @@ tabix -p vcf -C $OUTVCF
 
 printf "\nfinished\n"
 
---- end bash code ---
+```
 
 notes:
 - tabix option -C (for generating a csi index) is only needed if scaffolds are very long. Otherwise, the default tbi index is okay.
@@ -1058,10 +1054,9 @@ $ for i in {1..12}; do echo "/mnt/gs21/scratch/lindero1/atelopus/wgs/variants/an
 >> /mnt/research/Fitz_Lab/projects/atelopus/atelopus_wgs/variants/scripts/atelopus_vcf_list.txt; done
 
 $ sbatch /mnt/research/Fitz_Lab/projects/atelopus/atelopus_wgs/variants/scripts/concat_vcfs.sh
-implements:
+bash code:
 
---- start bash code ---
-
+```
 VCFLIST='/mnt/research/Fitz_Lab/projects/atelopus/atelopus_wgs/variants/scripts/atelopus_vcf_list.txt'
 OUTVCF='/mnt/research/Fitz_Lab/projects/atelopus/atelopus_wgs/variants/vcf/atelopus_annotated_genome.vcf.gz'
 
@@ -1073,8 +1068,7 @@ wait
 
 tabix -p vcf -C $OUTVCF
 
---- end bash code ---
-
+```
 
 ## (6h) Generate position files of quality-controlled sites.
 
@@ -1094,10 +1088,9 @@ The group representation filter helps to accurately quantify genetic structure i
 groups/populations/species etc.
 
 $ sbatch /mnt/research/Fitz_Lab/projects/atelopus/atelopus_wgs/variants/scripts/extract_qc_sites_array.sh
-implements:
+bash code:
 
---- start bash code ---
-
+```
 VCF="/mnt/gs21/scratch/lindero1/atelopus/wgs/variants/annotated/atelopus_annotated_${SLURM_ARRAY_TASK_ID}.vcf.gz"
 SITES="/mnt/research/Fitz_Lab/projects/atelopus/atelopus_wgs/variants/vcf/qc_sites/sp_comparisons/atelopus_qc_sites_${SLURM_ARRAY_TASK_ID}.pos"
 
@@ -1111,7 +1104,7 @@ angsd sites index $SITES
 
 printf "\nfinished\n"
 
---- end bash code ---
+```
 
 
 Concatenate position files into a single, genome-wide file of QC-passed sites (optional)
@@ -1138,10 +1131,9 @@ The following code extracts SNP positions from the final VCF for which:
 -the SNP is biallelic.
 
 $ sbatch /mnt/research/Fitz_Lab/projects/atelopus/atelopus_wgs/variants/scripts/extract_qc_snps_array.sh
-implements:
+bash code:
 
---- start bash code ---
-
+```
 VCF="/mnt/gs21/scratch/lindero1/atelopus/wgs/variants/annotated/atelopus_annotated_${SLURM_ARRAY_TASK_ID}.vcf.gz"
 SITES="/mnt/research/Fitz_Lab/projects/atelopus/atelopus_wgs/variants/vcf/qc_snps/sp_comparisons/atelopus_qc_snps_${SLURM_ARRAY_TASK_ID}.pos"
 
@@ -1154,7 +1146,7 @@ angsd sites index $SITES
 
 printf "\nfinished\n"
 
---- end bash code ---
+```
 
 
 Concatenate SNP positions into a single genome-wide file of QC-passed SNPs (optional)

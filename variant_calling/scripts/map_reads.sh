@@ -2,7 +2,7 @@
 
 # map_reads.sh
 
-VERSION='1.1.1'
+VERSION='1.2.1'
 NTHREAD=1
 REF=''
 SAMPLE_ID=''
@@ -14,6 +14,7 @@ OUTPREFIX=''
 PLATFORM=''
 DATADS=''
 BWAOPT=''
+SINGLE=0
 
 if [ $# -lt 8 ]
 then
@@ -29,15 +30,17 @@ then
 	>&2 printf "%s\n" "--name_mod    STRING   Extra text in fastq file names"
 	>&2 printf "%s\n" "--platform    STRING   Sequencing platform, e.g. Illumina, Aviti"
 	>&2 printf "%s\n" "--ds          STRING   Data description contained in single or double quotes, e.g. 'Florida Scrub-Jay whole genome sequencing data'"
+	>&2 printf "%s\n" "--single               Evoke to indicate that data are single-end."
 	>&2 printf "%s\n" "--outprefix   STRING   Output bam file will be outdir/outprefix_untrimmed.bam. Default bam name is sample_id along with sample_lib and name_mod information if provided."
 	>&2 printf "%s [%i]\n" "--threads     INT      Number of threads" $NTHREAD
 	>&2 printf "%s\n\n" "--bwaopt      STRING   bwa mem options other than -t and -R (entire string should be within single or double quotes)"
 	>&2 printf "Usage notes:\n"
-	>&2 printf "\n%s\n" "Input fastq files must be gziped and named as <sample id>[_sample lib][_name mod][_batch number]_R1|2.fastq.gz"
+	>&2 printf "\n%s\n" "Paired-end input fastq files must be gziped and named as <sample id>[_sample lib][_name mod][_batch number]_R<1|2>.fastq.gz"
+	>&2 printf "%s\n" "Single-end input fastq files must be gziped and named as <sample id>[_sample lib][_name mod][_batch number]*.fastq.gz"
 	>&2 printf "%s\n" "<> = required, [] = optional (notice that underscores separate optional strings)"
 	>&2 printf "%s\n" "R1 = forward reads, R2 = reverse reads"
 	>&2 printf "\n%s\n" "All batches for a sample contained in the input fastq directory will be mapped."
-	>&2 printf "\n%s\n" "Currently this script only supports paired-end data and headers that are in the Casava 1.8 format."
+	>&2 printf "\n%s\n" "Currently this script only supports reads with headers that are in the Casava 1.8 format."
 	>&2 printf "\nversion %s\n" $VERSION
 	exit
 fi
@@ -79,6 +82,8 @@ while [[ $# -gt 1 ]]; do
 		--threads)
 		  NTHREAD="$2"
 		  shift;;
+		--single)
+		  SINGLE=1
 		*)
 		>&2 echo "Error: Unknown argument $1"
 		exit 1;;
@@ -151,34 +156,28 @@ fi
 
 printf "Processing all fastq files for $SAMPLE_NAME\n"
 
-fqlist=($(find $FQDIR -name "${SAMPLE_NAME}*.fastq.gz" | tr '\n' ' '))
-numlanes=$(perl -e '$nfile = <>; print $nfile/2' <<< ${#fqlist[@]}) # this is the number of fastq batches to process
-if [ $numlanes -lt 1 ]; then >&2 printf "No files with sample name %s in %s\n" "$SAMPLE_NAME" "$FQDIR"; exit 1; fi
+declare -a fqlist;
+if [[ $SINGLE == 1 ]]; then
+	fqlist=($(find $FQDIR -name "${SAMPLE_NAME}*.fastq.gz" | tr '\n' ' '))
+else
+	fqlist=($(find $FQDIR -name "${SAMPLE_NAME}*_R1.fastq.gz" | tr '\n' ' '))
+fi
+numlanes=${#fqlist[@]} # this is the number of fastq batches to process
 
 # create an array of batch numbers
 lane_n=()
 for fq in ${fqlist[@]}; do
-	lnn=$(echo "$fq" | perl -s -ne 'print $1 if $_ =~ /${samp}_(\d+)_R[12]/' -- -samp="$SAMPLE_NAME")
+	lnn=$(echo "$fq" | perl -s -ne 'print $1 if $_ =~ /${samp}_(\d+)/' -- -samp="$SAMPLE_NAME")
 	if [[ ! " ${lane_n[*]} " =~ [[:space:]]${lnn}[[:space:]] ]]; then lane_n+=("$lnn"); fi
 done
 
-# if input fastq files don't have batch numbers (i.e. one batch) make an array of just 1
-batchid=1
-if [[ "${#lane_n[@]}" -eq 0 ]]; then
-	lane_n=(1)
-	batchid=0
-fi
-
-# LOOP OVER LANES TO MAP EACH SET OF PE FILES
+# LOOP OVER LANES TO MAP EACH SET OF FASTQ FILES
 declare -a readheader
 lanecounter=1
-for lanenum in ${lane_n[@]}
+for FWDFQ in ${fqlist[@]}
 do
-
-	FWDFQ="${FQDIR}/${SAMPLE_NAME}"
-	if [ $batchid -eq 1 ]; then FWDFQ+="_${lanenum}"; fi
-	FWDFQ+="_R1.fastq.gz"
-	REVFQ=$( echo "$FWDFQ" | sed 's/_R1\.fastq\.gz$/_R2\.fastq\.gz/')
+	REVFQ=''
+	if [[ $SINGLE == 0 ]]; do REVFQ=$( echo "$FWDFQ" | sed 's/_R1\.fastq\.gz$/_R2\.fastq\.gz/'); done
 
 	prevrg='N'
 	readgroup=''
@@ -205,14 +204,19 @@ do
 	printf "\n--MAPPING READS (batch %i/%i)--\n" "$lanecounter" "$numlanes"
 	#echo "$readgroup"; exit # debug
 
-	# map paired-end reads
+	# map reads
 
 	OUTBAM="${OUTFULL}_raw"
 	if [ $numlanes -gt 1 ]; then OUTBAM+="_${lanenum}.bam"; else OUTBAM+=".bam"; fi
 
 	MAPCMD="bwa mem -t $NTHREAD -R '$readgroup'"
 	if [ ! -z "$BWAOPT" ]; then MAPCMD+=" $BWAOPT"; fi
-	MAPCMD+=" $REF $FWDFQ $REVFQ | samtools view -b > $OUTBAM"
+	if [[ $SINGLE == 1 ]]; do
+		MAPCMD+=" $REF $FWDFQ"
+	else
+		MAPCMD+=" $REF $FWDFQ $REVFQ"
+	fi
+	MAPCMD+=" | samtools view -b > $OUTBAM"
 	printf "\n%s\n\n" "$MAPCMD"
 	eval $MAPCMD
 	wait
