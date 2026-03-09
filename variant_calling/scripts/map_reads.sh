@@ -84,6 +84,7 @@ while [[ $# -gt 1 ]]; do
 		  shift;;
 		--single)
 		  SINGLE=1
+		  ;;
 		*)
 		>&2 echo "Error: Unknown argument $1"
 		exit 1;;
@@ -177,7 +178,7 @@ lanecounter=1
 for FWDFQ in ${fqlist[@]}
 do
 	REVFQ=''
-	if [[ $SINGLE == 0 ]]; do REVFQ=$( echo "$FWDFQ" | sed 's/_R1\.fastq\.gz$/_R2\.fastq\.gz/'); done
+	if [[ $SINGLE == 0 ]]; then REVFQ=$( echo "$FWDFQ" | sed 's/_R1\.fastq\.gz$/_R2\.fastq\.gz/'); fi
 
 	prevrg='N'
 	readgroup=''
@@ -207,11 +208,16 @@ do
 	# map reads
 
 	OUTBAM="${OUTFULL}_raw"
-	if [ $numlanes -gt 1 ]; then OUTBAM+="_${lanenum}.bam"; else OUTBAM+=".bam"; fi
+	if [ $numlanes -gt 1 ]; then
+		lanenum=${lane_n[$(($lanecounter-1))]}
+		OUTBAM+="_${lanenum}.bam"
+	else
+		OUTBAM+=".bam"
+	fi
 
 	MAPCMD="bwa mem -t $NTHREAD -R '$readgroup'"
 	if [ ! -z "$BWAOPT" ]; then MAPCMD+=" $BWAOPT"; fi
-	if [[ $SINGLE == 1 ]]; do
+	if [[ $SINGLE == 1 ]]; then
 		MAPCMD+=" $REF $FWDFQ"
 	else
 		MAPCMD+=" $REF $FWDFQ $REVFQ"
