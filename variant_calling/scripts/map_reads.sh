@@ -2,7 +2,7 @@
 
 # map_reads.sh
 
-VERSION='1.2.1'
+VERSION='1.2.2'
 NTHREAD=1
 REF=''
 SAMPLE_ID=''
@@ -15,6 +15,8 @@ PLATFORM=''
 DATADS=''
 BWAOPT=''
 SINGLE=0
+EXCLUDE_UNMAPPED=0
+ONLY_PAIRED=0
 
 if [ $# -lt 8 ]
 then
@@ -33,7 +35,9 @@ then
 	>&2 printf "%s\n" "--single               Evoke to indicate that data are single-end."
 	>&2 printf "%s\n" "--outprefix   STRING   Output bam file will be outdir/outprefix_untrimmed.bam. Default bam name is sample_id along with sample_lib and name_mod information if provided."
 	>&2 printf "%s [%i]\n" "--threads     INT      Number of threads" $NTHREAD
-	>&2 printf "%s\n\n" "--bwaopt      STRING   bwa mem options other than -t and -R (entire string should be within single or double quotes)"
+	>&2 printf "%s\n" "--bwaopt      STRING   bwa mem options other than -t and -R (entire string should be within single or double quotes)"
+	>&2 printf "%s\n" "--exclude_unmapped     Exclude unmapped reads."
+	>&2 printf "%s\n\n" "--only_paired          Only process and output reads that map in a proper pair."
 	>&2 printf "Usage notes:\n"
 	>&2 printf "\n%s\n" "Paired-end input fastq files must be gziped and named as <sample id>[_sample lib][_name mod][_batch number]_R<1|2>.fastq.gz"
 	>&2 printf "%s\n" "Single-end input fastq files must be gziped and named as <sample id>[_sample lib][_name mod][_batch number]*.fastq.gz"
@@ -85,6 +89,12 @@ while [[ $# -gt 1 ]]; do
 		--single)
 		  SINGLE=1
 		  ;;
+		--exclude_unmapped)
+		  EXCLUDE_UNMAPPED=1
+		  ;;
+		--only_paired)
+		  ONLY_PAIRED=1
+		  ;;
 		*)
 		>&2 echo "Error: Unknown argument $1"
 		exit 1;;
@@ -131,17 +141,24 @@ else
 	exit 1
 fi
 
-if [ $NTHREAD -lt 1 ]; then "Error: Cannot request fewer than 1 threads"; exit 1; fi
+if [ $NTHREAD -lt 1 ]; then >&2 echo "Error: Cannot request fewer than 1 threads"; exit 1; fi
 
-#NTHREAD=1
-#REF=$1 # reference fasta
-#SAMPLE_NAME=$2 # sample name, e.g. T_101
-#FQDIR=$3
-#OUTDIR=$4
-#PLATFORM=$5
-#if [ $# -gt 6 ]; then NTHREAD=$7; fi
+subset_arg="" # optional arguments to samtools to only keep subsets of reads based on how they map
 
-#DATADS=$6 # data description, e.g. 'Whole genome sequences from Florida scrub jays sequenced for the Mosaic project.'
+if [[ "$EXCLUDE_UNMAPPED" -eq 1 ]]; then
+	subset_arg="-F 0x4"
+fi
+
+if [[ "$ONLY_PAIRED" -eq 1 ]]; then
+	if [[ "$SINGLE" -eq 1 ]]; then
+		>&2 echo "Error: specifying --only_paired and --single is incompatible"
+		exit 1
+	fi
+	if [[ "$EXCLUDE_UNMAPPED" -eq 1 ]]; then >&2 echo "Warning: both --exclude_unmapped and --only_paired specified. Only properly paired reads will be processed."
+	subset_arg="-f 0x3"
+fi
+
+#elif [[ "$ONLY_PAIRED" -eq 1 ]]; then
 
 if [[ "$FQDIR" == */ ]]; then FQDIR=$(echo "$FQDIR" | sed 's/\/$//'); fi
 
@@ -222,7 +239,9 @@ do
 	else
 		MAPCMD+=" $REF $FWDFQ $REVFQ"
 	fi
-	MAPCMD+=" | samtools view -b > $OUTBAM"
+	MAPCMD+=" | samtools view -b"
+	if [ ! -z "$subset_arg" ]; then MAPCMD+=" $subset_arg"
+	MAPCMD+=" > $OUTBAM"
 	printf "\n%s\n\n" "$MAPCMD"
 	eval $MAPCMD
 	wait
