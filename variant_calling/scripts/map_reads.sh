@@ -154,7 +154,7 @@ if [[ "$ONLY_PAIRED" -eq 1 ]]; then
 		>&2 echo "Error: specifying --only_paired and --single is incompatible"
 		exit 1
 	fi
-	if [[ "$EXCLUDE_UNMAPPED" -eq 1 ]]; then >&2 echo "Warning: both --exclude_unmapped and --only_paired specified. Only properly paired reads will be processed."
+	if [[ "$EXCLUDE_UNMAPPED" -eq 1 ]]; then >&2 echo "Warning: both --exclude_unmapped and --only_paired specified. Only properly paired reads will be processed."; fi
 	subset_arg="-f 0x3"
 fi
 
