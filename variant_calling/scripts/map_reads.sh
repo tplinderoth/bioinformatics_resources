@@ -158,8 +158,6 @@ if [[ "$ONLY_PAIRED" -eq 1 ]]; then
 	subset_arg="-f 0x3"
 fi
 
-#elif [[ "$ONLY_PAIRED" -eq 1 ]]; then
-
 if [[ "$FQDIR" == */ ]]; then FQDIR=$(echo "$FQDIR" | sed 's/\/$//'); fi
 
 if [[ "$OUTDIR" == */ ]]; then OUTDIR=$(echo "$OUTDIR" | sed 's/\/$//'); fi
@@ -240,7 +238,7 @@ do
 		MAPCMD+=" $REF $FWDFQ $REVFQ"
 	fi
 	MAPCMD+=" | samtools view -b"
-	if [ ! -z "$subset_arg" ]; then MAPCMD+=" $subset_arg"
+	if [ ! -z "$subset_arg" ]; then MAPCMD+=" $subset_arg"; fi
 	MAPCMD+=" > $OUTBAM"
 	printf "\n%s\n\n" "$MAPCMD"
 	eval $MAPCMD
