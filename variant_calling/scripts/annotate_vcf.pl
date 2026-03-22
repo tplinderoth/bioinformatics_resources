@@ -813,7 +813,7 @@ while (<$vcffh>) {
 			$iter++;
 		}
 		die("FMT/GT missing at $tok[0] $tok[1]\n") if ($dohet && $gtidx == -9);
-		die("FMT/GQ missing at $tok[0] $tok[1]\n") if ($dohet && $mingq > 0 && $gqidx == -9);
+		die("FMT/GQ missing at $tok[0] $tok[1]\n") if ($dohet && $mingq > 0 && $tok[4] ne "." && $gqidx == -9);
 		die ("FMT/DP missing at $tok[0] $tok[1]\n") if ($genorep && $dpidx == -9);
 	}
 
@@ -857,7 +857,7 @@ while (<$vcffh>) {
 	}
 
 	## heterozygote frequency
-	if ($dohet) {
+	if ($dohet && $tok[4] ne ".") {
 		my ($ngt, $nhet) = (0,0);
 		for (my $i = 9; $i <= $#tok; $i++) {
 			my @indarr = split(':',$tok[$i]);
