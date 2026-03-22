@@ -435,7 +435,7 @@ push @{$header{INFO}}, $grp_gq_string if ($genorep && !$seen{repgq});
 push @{$header{INFO}}, $grp_dp_string if ($genorep && !$seen{repdp});
 push @{$header{INFO}}, $het_string if ($dohet && !$seen{het});
 push @{$header{INFO}}, $vt_string if (!$seen{vt});
-push @{$header{INFO}}, $devvar_lrt_string if (!$seen{devlrt});
+push @{$header{INFO}}, $devvar_lrt_string if ($devsnp && !$seen{devlrt});
 push @{$header{FILTER}}, $lowdp_string if ($dpbounds && !$seen{lowdp});
 push @{$header{FILTER}}, $highdp_string if ($dpbounds && !$seen{highdp});
 push @{$header{FILTER}}, $highhet_string if ($hetbound && !$seen{highhet});
