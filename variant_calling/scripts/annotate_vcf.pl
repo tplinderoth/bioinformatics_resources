@@ -11,7 +11,7 @@ use IO::Zlib;
 use List::MoreUtils qw(uniq);
 #use warnings FATAL => 'all';
 
-my $version = '1.3.1'; # updated to take custom filter annotations
+my $version = '1.3.2'; # updated to take custom filter annotations
 my $alfile = undef;
 my $alfields = undef;
 my $anctype = 'parsimony';
@@ -148,7 +148,7 @@ if ($anno) {
 	open(my $annofh, '<', $anno) or die("Unable to open file of flag descriptions $anno\n");
 	while (<$annofh>) {
 		chomp;
-		my @tok = split($_, /\t/);
+		my @tok = split(/\t/, $_);
 		if (exists $default_flags{$tok[0]}) {
 			$default_flags{$tok[0]} = $tok[1];
 		} else {
