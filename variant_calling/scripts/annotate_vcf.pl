@@ -11,7 +11,7 @@ use IO::Zlib;
 use List::MoreUtils qw(uniq);
 #use warnings FATAL => 'all';
 
-my $version = '1.3.2'; # updated to take custom filter annotations
+my $version = '1.3.3'; # fixed identification of sites overlapping deletions
 my $alfile = undef;
 my $alfields = undef;
 my $anctype = 'parsimony';
@@ -521,7 +521,7 @@ while (<$vcffh>) {
 	$site_count++;
 
 	## Determine variant type
-	@indel = (0,0,'') if ($chr ne $indel[2]); # reset indel for new chromosome
+	@indel = (0,0,'') if ($vcfchr ne $indel[2]); # reset indel for new chromosome
 	die("Multiple reference alleles found at $tok[0] $tok[1]") if ($tok[3] =~ /,/);
 	die("Unexpecte allele in reference at $tok[0] $tok[1]") if ($tok[4] =~ /[^ACGT]i/);
 	my $reflen = length($tok[3]);
@@ -536,7 +536,7 @@ while (<$vcffh>) {
 			$indel[2] = $tok[0]; # chromosome
 		}
 	}
-	my $widel = ($tok[1] >= $indel[0] && $tok[1] <= $indel[1] && $chr eq $indel[2]) ? 1 : 0;
+	my $widel = ($tok[1] >= $indel[0] && $tok[1] <= $indel[1] && $vcfchr eq $indel[2]) ? 1 : 0;
 	
 	my ($issnp, $isins, $isdel) = (0,0,0);
 	my @snp_alleles = ();
@@ -591,16 +591,22 @@ while (<$vcffh>) {
 		$vt .= ',SNP' if ($issnp && $vt !~ /snp/i);
 		$vt .= ',DEL' if ($isdel && $vt !~ /deletion/i);
 		$vt .= ',INS' if ($isins && $vt !~ /insertion/i);
-		$vt .= ',SID' if ($widel && $issnp && $vt !~ /widel/i); # SID = SNP in Deletion
-		$vt = '.' if $tok[4] eq '.'; # monomorphic site
+		$vt .= ',SNPWD' if ($widel && $issnp && $vt !~ /SNPWD/i); # SNPWD = SNP Within Deletion
+		if ($tok[4] eq ".") {
+			# monomorphic site
+			$vt = $widel ? 'OVLDEL' : '.'; # site Overlaps Deletion
+		}
 		$tok[7] =~ s/VT=$vt_original/VT=$vt/;
 	} else {
 		$vt .= ',SNP' if ($issnp);
 		$vt .= ',DEL' if ($isdel);
 		$vt .= ',INS' if ($isins);
-		$vt .= ',SID' if ($widel && $issnp);
+		$vt .= ',SNPWD' if ($widel && $issnp);
 		$vt =~ s/^,//;
-		$vt = '.' if $tok[4] eq '.'; # monomorphic site
+		if ($tok[4] eq ".") {
+			# monomorphic site
+			$vt = $widel ? 'OVLDEL' : '.';
+		}
 		$tok[7] .= ";VT=$vt";
 	}
 
