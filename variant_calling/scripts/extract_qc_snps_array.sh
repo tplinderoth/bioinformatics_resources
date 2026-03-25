@@ -36,9 +36,7 @@
 #! Don't put any #SBATCH directives below this line
 
 #! Modify the environment seen by the application. For this example we need the default modules.
-#! . /etc/profile.d/modules.sh                # This line enables the module command
 #! module purge                               # Removes all modules still loaded
-#! module load rhel7/default-peta4            # REQUIRED - loads the basic environment
 
 #! Are you using OpenMP (NB this is unrelated to OpenMPI)? If so increase this
 #! export OMP_NUM_THREADS=1
@@ -47,11 +45,6 @@
 #! In this example, each job will be passed its index, so each output file will contain a different value
 echo "This is job" $SLURM_ARRAY_TASK_ID
 
-#! Command line that we want to run:
-#! jobDir=Job_$SLURM_ARRAY_TASK_ID
-#! mkdir $jobDir
-#! cd $jobDir
-
 workdir="$SLURM_SUBMIT_DIR" # The value of SLURM_SUBMIT_DIR sets workdir to the directory
 cd $workdir
 
@@ -59,7 +52,7 @@ VCF="/mnt/gs21/scratch/lindero1/atelopus/wgs/variants/annotated/atelopus_annotat
 SITES="/mnt/research/Fitz_Lab/projects/atelopus/atelopus_wgs/variants/vcf/qc_snps/sp_comparisons/atelopus_qc_snps_${SLURM_ARRAY_TASK_ID}.pos"
 
 bcftools view -f "PASS" -i 'N_PASS(FMT/DP[0-10] > 1) > 9 && N_PASS(FMT/DP[11] > 1) > 0 && N_PASS(FMT/DP[12-13] > 1) > 1 && N_PASS(FMT/DP[14] > 1) > 0 && N_PASS(FMT/DP[15] > 1) > 0 && N_PASS(FMT/DP[16] > 1) > 0 && N_PASS(FMT/DP[17-18] > 1) > 1 && N_PASS(FMT/DP[19] > 1) > 0 && VT="SNP"' -m 2 -M 2 $VCF \
-| bcftools query -f '%CHROM\t%POS\n' | uniq > $SITES
+| bcftools query -f '%CHROM\t%POS\n' -e 'VT="OVLDEL"' | uniq > $SITES
 
 wait
 

@@ -1081,7 +1081,7 @@ The following code extracts all sites from the VCF (and indexes the resulting po
 -FILTER="PASS".
 -At least 90% of individuals from each group (this could be species, population, etc.) are covered by at least 2 reads. Note that the exact values are dataset specific.
 -The site is either a SNP or monomorphic (excludes INDELs).
--SNPs are outside of INDELs.
+-The site does not overlap a deletion with respect to the reference genome.
 -SNPs are biallelic.
 
 The group representation filter helps to accurately quantify genetic structure in analyses involving multiple 
@@ -1096,7 +1096,7 @@ SITES="/mnt/research/Fitz_Lab/projects/atelopus/atelopus_wgs/variants/vcf/qc_sit
 
 bcftools view -f "PASS" -i 'N_PASS(FMT/DP[0-10] > 1) > 9 && N_PASS(FMT/DP[11] > 1) > 0 && N_PASS(FMT/DP[12-13] > 1) > 1 && N_PASS(FMT/DP[14] > 1) > 0 && N_PASS(FMT/DP[15] > 1) > 0 && N_PASS(FMT/DP[16] > 
 1) > 0 && N_PASS(FMT/DP[17-18] > 1) > 1 && N_PASS(FMT/DP[19] > 1) > 0 && (VT="." || VT="SNP")' -M 2 $VCF \
-| bcftools query -f '%CHROM\t%POS\n' | uniq > $SITES
+| bcftools query -f '%CHROM\t%POS\n' -e 'VT="OVLDEL"' | uniq > $SITES
 
 wait
 
@@ -1127,7 +1127,7 @@ $ cut -f1 /mnt/ufs18/rs-012/Fitz_Lab/projects/atelopus/atelopus_wgs/variants/vcf
 The following code extracts SNP positions from the final VCF for which:
 -FILTER="PASS".
 -At least 90% of individuals from each group (e.g. population, species) are covered by at least 2 reads.
--the SNP does not overlap a deletion.
+-the SNP does not overlap a deletion with respect to the reference genome.
 -the SNP is biallelic.
 
 $ sbatch /mnt/research/Fitz_Lab/projects/atelopus/atelopus_wgs/variants/scripts/extract_qc_snps_array.sh
@@ -1138,7 +1138,7 @@ VCF="/mnt/gs21/scratch/lindero1/atelopus/wgs/variants/annotated/atelopus_annotat
 SITES="/mnt/research/Fitz_Lab/projects/atelopus/atelopus_wgs/variants/vcf/qc_snps/sp_comparisons/atelopus_qc_snps_${SLURM_ARRAY_TASK_ID}.pos"
 
 bcftools view -f "PASS" -i 'N_PASS(FMT/DP[0-10] > 1) > 9 && N_PASS(FMT/DP[11] > 1) > 0 && N_PASS(FMT/DP[12-13] > 1) > 1 && N_PASS(FMT/DP[14] > 1) > 0 && N_PASS(FMT/DP[15] > 1) > 0 && N_PASS(FMT/DP[16] > 1) > 0 && N_PASS(FMT/DP[17-18] > 1) > 1 && N_PASS(FMT/DP[19] > 1) > 0 && VT="SNP"' -m 2 -M 2 $VCF \
-| bcftools query -f '%CHROM\t%POS\n' | uniq > $SITES
+| bcftools query -f '%CHROM\t%POS\n' -e 'VT="OVLDEL"' | uniq > $SITES
 
 wait
 
