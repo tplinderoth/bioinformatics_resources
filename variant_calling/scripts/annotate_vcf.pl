@@ -533,7 +533,7 @@ while (<$vcffh>) {
 			my $start = $tok[1]+1;
 			$indel[0] = $tok[1]+1 if $start > $indel[1]; # this is the first base actually deleted
 			$indel[1] = $varend; # this is the last base actually deleted
-			$indel[2] = $tok[0]; # chromosome
+			$indel[2] = uc($tok[0]); # chromosome
 		}
 	}
 	my $widel = ($tok[1] >= $indel[0] && $tok[1] <= $indel[1] && $vcfchr eq $indel[2]) ? 1 : 0;
@@ -591,7 +591,7 @@ while (<$vcffh>) {
 		$vt .= ',SNP' if ($issnp && $vt !~ /snp/i);
 		$vt .= ',DEL' if ($isdel && $vt !~ /deletion/i);
 		$vt .= ',INS' if ($isins && $vt !~ /insertion/i);
-		$vt .= ',SNPWD' if ($widel && $issnp && $vt !~ /SNPWD/i); # SNPWD = SNP Within Deletion
+		$vt .= ',OVLDEL' if ($widel && $issnp && $vt !~ /OVLDEL/i); # SNP Overlaps Deletion
 		if ($tok[4] eq ".") {
 			# monomorphic site
 			$vt = $widel ? 'OVLDEL' : '.'; # site Overlaps Deletion
@@ -601,7 +601,7 @@ while (<$vcffh>) {
 		$vt .= ',SNP' if ($issnp);
 		$vt .= ',DEL' if ($isdel);
 		$vt .= ',INS' if ($isins);
-		$vt .= ',SNPWD' if ($widel && $issnp);
+		$vt .= ',OVLDEL' if ($widel && $issnp);
 		$vt =~ s/^,//;
 		if ($tok[4] eq ".") {
 			# monomorphic site
