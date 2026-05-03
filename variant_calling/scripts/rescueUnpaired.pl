@@ -62,14 +62,13 @@ foreach my $infile (@fqfiles) {
 				print $outfh "$header\n$seq\n$opt\n$qual\n";
 			}
 		} else {
-			last if eof($fh);
 			# If the sequence/base quality string length is zero at the end of a gzipped file, the eof method is unreliable, 
 			# therefore, test for any empty header string, which should always be nonempty in a correctly formatted fastq, and then
 			# exit normally if eof is true. If a nonempty header is found before the end of the fastq file, somethig must be
 			# wrong with the fastq.
-			die ("Error: $infile format appears incorrect\n");
+			die ("Error: $infile format appears incorrect\n") unless eof($fh);
 		}
-	} while (1);
+	} until (eof($fh));
 
 	close $fh;
 }
