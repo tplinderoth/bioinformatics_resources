@@ -11,7 +11,7 @@ use IO::Zlib;
 use List::MoreUtils qw(uniq);
 #use warnings FATAL => 'all';
 
-my $version = '1.4.0'; # added more supported bed flags and fixed a FILTER overwrite bug 
+my $version = '1.3.3'; # fixed identification of sites overlapping deletions
 my $alfile = undef;
 my $alfields = undef;
 my $anctype = 'parsimony';
@@ -36,18 +36,18 @@ my %default_flags = (
 'REPDP' => "Number of genotyped individuals from different classes with a minimum DP",
 'HET' => "Proportion of heterozygous individuals",
 'DEVLRT' => "Likelihood ratio test statistic from ngsParalog test of a deviant variant",
-'LowDP' => "Excessively low total site DP",
-'HighDP' => "Excessively high total site DP",
+'LowDP' => "Total site DP below excessively low cutoff of INTEGER",
+'HighDP' => "Total site DP above excessively high cutoff of INTEGER",
 'NoCov' => "No mapped reads",
 'LowCov' => "Excessively low total site depth",
 'ExcessCov' => "Excessively high total site depth",
-'HighHet' => "Low p-value for test of excess heterozygosity",
+'HighHet' => "P-value for test of excess heterozygosity is below FLOAT",
 'LowMQ' => "Low average mapping quality",
 'ExcessMQ0' => "Excessively high proportion of reads with mapping quality of zero",
 'LowBQ' => "Low average base quality",
 'ExcessBQ0' => "Excessively high proportion of reads with base quality of zero",
-'Poly' => "Excessively high proportion of polymorphic samples",
-'DeviantVar' => "Deviant variant based on ngsParalog LRT statistic");
+'Poly' => "Proportion of polymorphic samples above excessively high cutoff of FLOAT",
+'DeviantVar' => "Deviant variant based on ngsParalog LRT statistic above cutoff of FLOAT");
 
 die(qq/
 annotate_vcf.pl version $version
@@ -115,8 +115,6 @@ $userargs{"--anno"} = undef if (!$anno);
 
 die(qq/
 Optional VCF annotation flags, the default descriptions, and the argument that triggers the flag for inclusion.
---bed FILTER flag header lines are only added or updated for flags found in the bed file. Arguments marked with
-\"*\" in the default descriptions below will incorporate the user-supplied cutoff values into the default headers.
 
 To change the default descriptions provide a tab-delimited file to --anno with columns [1] flag ID \(case sensitive\), [2] description \(should not contain tabs\).
 Each row in the --anno file is a different flag. Do not enclose descriptions in double quotes.
@@ -128,11 +126,11 @@ HET    \"$default_flags{HET}\" \(--dohet\)
 DEVLRT \"$default_flags{DEVLRT}\" (--devlr_file)
 
 FILTER annotations:
-LowDP      \"$default_flags{LowDP}\" \(--bed or --dpbounds*\)
-HighDP     \"$default_flags{HighDP}\" \(--bed or --dpbounds*\)
-HighHet    \"$default_flags{HighHet}\" \(--bed or --hetbound*\)
-Poly       \"$default_flags{Poly}\" \(--bed or --maxpoly*\)
-DeviantVar \"$default_flags{DeviantVar}\" \(--bed or --max_devlr*\)
+LowDP      \"$default_flags{LowDP}\" \(--dpbounds\)
+HighDP     \"$default_flags{HighDP}\" \(--dpbounds\)
+HighHet    \"$default_flags{HighHet}\" \(--hetbound\)
+Poly       \"$default_flags{Poly}\" \(--maxpoly\)
+DeviantVar \"$default_flags{DeviantVar}\" \(--max_devlr\)
 NoCov      \"$default_flags{NoCov}\" \(--bed\)
 LowCov     \"$default_flags{LowCov}\" \(--bed\)
 ExcessCov  \"$default_flags{ExcessCov}\" \(--bed\)
@@ -265,8 +263,8 @@ if ($dpbounds) {
 		die("ERROR: --dpbounds upper bound must be greater than the lower bound value\n");
 	}
 
-	$default_flags{LowDP} .= " (less than $dpcutoff[0]X)";
-	$default_flags{HighDP}.= " (greater than $dpcutoff[1]X)";
+	$default_flags{LowDP} =~ s/INTEGER$/$dpcutoff[0]/;
+	$default_flags{HighDP} =~ s/INTEGER$/$dpcutoff[1]/;
 	
 	$delfilter{HighDP} = 1;
 	$delfilter{LowDP} = 1;
@@ -274,26 +272,23 @@ if ($dpbounds) {
 
 if ($hetbound) {
 	die ("--hetbound outside [0,1] interval\n") if ($hetbound < 0 || $hetbound > 1);
-	$default_flags{HighHet} .= " (less than $hetbound)";
+	$default_flags{HighHet} =~ s/FLOAT$/$hetbound/;
 	$delfilter{HighHet} = 1;
 }
 
 if ($devsnp_maxlr) {
 	die("--max_devlr must be >= 0\n") if ($devsnp_maxlr < 0);
-	$default_flags{DeviantVar} .= " (value greater than $devsnp_maxlr)";
+	$default_flags{DeviantVar} =~ s/FLOAT$/$devsnp_maxlr/;
 	$delfilter{DeviantVar} = 1;
 }
 
 if (defined $maxpoly && ($maxpoly < 0 || $maxpoly > 1)) {
 	die("Error: --maxpoly out of range [0,1]\n");
-	$default_flags{Poly} .= " (greater than maxpoly)";
+	$default_flags{Poly} =~ s/FLOAT$/$maxpoly/;
 	$delfilter{Poly} = 1;
 }
 
-my %bedflags = (LowCov => 1, ExcessCov => 1, LowMQ => 1, ExcessMQ0 => 1, NoCov => 1, LowBQ => 1, ExcessBQ0 => 1, LowDP => 1, HighDP => 1,
-HighHet => 1, Poly => 1, DeviantVar => 1);
-my %bedfilter;
-
+my %bedfilter = (LowCov => 1, ExcessCov => 1, LowMQ => 1, ExcessMQ0 => 1, NoCov => 1, LowBQ => 1, ExcessBQ0 => 1);
 my %bedidx;
 if ($bed) {
 	if ($bedlist) {
@@ -302,9 +297,8 @@ if ($bed) {
 	}
 
 	open($bedfh, '<', $bed) or die("Unable to open bed file $bed: $!\n");
-	print STDERR "Indexing and checking bed file\n";
+	print STDERR "Indexing bed file\n";
 	IndexScaff($bedfh, \%bedidx, 0);
-	checkBed($bedfh, \%bedflags, \%bedfilter);
 
 	# debug
 	#foreach my $k (keys %bedidx) {
@@ -321,24 +315,6 @@ if ($bed) {
 			delete $bedfilter{$_};
 			next;
 		}
-		my $conflict = 0;
-		if (($_ eq "LowDP" || $_ eq "HighDP") && $dpbounds) {
-			print STDERR "Error: cannot use --dpbounds if also supplying \"LowDP\" and/or \"HighDP\" flag with a bed file\n";
-			$conflict = 1;
-		}
-		if ($_ eq "HighHet" && $hetbound) {
-			 print STDERR "Error: cannot use --hetbound if also supplying \"HighHet\" flag with a bed file\n";
-			$conflict = 1;
-		}
-		if ($_ eq "DeviantVar" && $devsnp_maxlr) {
-			print STDERR "Error: cannot use --max_devlr if also supplying \"DeviantVar\" flag with a bed file\n";
-			$conflict = 1;
-		}
-		if ($_ eq "Poly" && $maxpoly) {
-			print STDERR "Error: cannot use --maxpoly if also supplying \"Poly\" flag with a bed file\n";
-			$conflict = 1;
-		}
-		die("Recommend supplying --bedlist to ignore conflicting flags in the bed file\n") if $conflict;
 		$delfilter{$_} = 1;
 	}
 }
@@ -460,11 +436,11 @@ push @{$header{INFO}}, $grp_dp_string if ($genorep && !$seen{repdp});
 push @{$header{INFO}}, $het_string if ($dohet && !$seen{het});
 push @{$header{INFO}}, $vt_string if (!$seen{vt});
 push @{$header{INFO}}, $devvar_lrt_string if ($devsnp && !$seen{devlrt});
-push @{$header{FILTER}}, $lowdp_string if (($dpbounds || $bedfilter{LowDP}) && !$seen{lowdp});
-push @{$header{FILTER}}, $highdp_string if (($dpbounds || $bedfilter{HighDP}) && !$seen{highdp});
-push @{$header{FILTER}}, $highhet_string if (($hetbound || $bedfilter{HighHet}) && !$seen{highhet});
-push @{$header{FILTER}}, $devvar_string if (($devsnp_maxlr || $bedfilter{DeviantVar}) && !$seen{devfilter});
-push @{$header{FILTER}}, $poly_string if ((defined $maxpoly || $bedfilter{Poly}) && !$seen{poly});
+push @{$header{FILTER}}, $lowdp_string if ($dpbounds && !$seen{lowdp});
+push @{$header{FILTER}}, $highdp_string if ($dpbounds && !$seen{highdp});
+push @{$header{FILTER}}, $highhet_string if ($hetbound && !$seen{highhet});
+push @{$header{FILTER}}, $devvar_string if ($devsnp_maxlr && !$seen{devfilter});
+push @{$header{FILTER}}, $poly_string if (defined $maxpoly && !$seen{poly});
 push @{$header{FILTER}}, $nocov_string if ($bedfilter{NoCov});
 push @{$header{FILTER}}, $lowcov_string if ($bedfilter{LowCov});
 push @{$header{FILTER}}, $excesscov_string if ($bedfilter{ExcessCov});
@@ -619,8 +595,6 @@ while (<$vcffh>) {
 		if ($tok[4] eq ".") {
 			# monomorphic site
 			$vt = $widel ? 'OVLDEL' : '.'; # site Overlaps Deletion
-		} else {
-			$vt = join(',',uniq(split(/,/,$vt)));
 		}
 		$tok[7] =~ s/VT=$vt_original/VT=$vt/;
 	} else {
@@ -982,10 +956,10 @@ while (<$vcffh>) {
 				$tok[6] = join(';',@filter_annotations);
 			} else {
 				if ($overwrite) {
-					$tok[6] = join(';',@filter_annotations);
+					$tok[6] .= join(';',@filter_annotations);
 				} else {
 					push @filter_annotations, split(';', $tok[6]);
-					$tok[6] = join(';', reverse(uniq @filter_annotations));
+					$tok[6] = join(';', uniq @filter_annotations);
 				}
 			}
 		} else {
@@ -1081,26 +1055,6 @@ sub IndexScaff {
 	}
 }
 
-sub checkBed {
-	my ($fh, $accept, $flags) = @_;
-	my %flagwarn;
-	seek $fh, 0, 0;
-	while (my $line = readline($$fh)) {
-		chomp($line);
-		my @tok = split(/\s+/, $line);
-		foreach my $f ($tok[3]) {
-			if (exists $$accept{$f}) {
-				$$flags{$f} = 1;
-			} else {
-				if (!exists $flagwarn{$f}) {
-					print STDERR "Warning: bed flag $f is not supported and will be ignored\n";
-					$flagwarn{$f} = 1;
-				}
-			}
-		}
-	}
-	seek $fh, 0, 0;
-}
 
 sub makeLookup {
 ### returns species representing the ancestral allele ###
