@@ -2,7 +2,7 @@
 
 # map_reads.sh
 
-VERSION='1.2.2'
+VERSION='1.2.3'
 NTHREAD=1
 REF=''
 SAMPLE_ID=''
@@ -17,6 +17,7 @@ BWAOPT=''
 SINGLE=0
 EXCLUDE_UNMAPPED=0
 ONLY_PAIRED=0
+SKIP_DUP_MARK=0
 
 if [ $# -lt 8 ]
 then
@@ -37,7 +38,8 @@ then
 	>&2 printf "%s [%i]\n" "--threads     INT      Number of threads" $NTHREAD
 	>&2 printf "%s\n" "--bwaopt      STRING   bwa mem options other than -t and -R (entire string should be within single or double quotes)"
 	>&2 printf "%s\n" "--exclude_unmapped     Exclude unmapped reads."
-	>&2 printf "%s\n\n" "--only_paired          Only process and output reads that map in a proper pair."
+	>&2 printf "%s\n" "--only_paired          Only process and output reads that map in a proper pair."
+	>&2 printf "%s\n\n" "--skip_dup_marking     Do not mark duplicate reads."
 	>&2 printf "Usage notes:\n"
 	>&2 printf "\n%s\n" "Paired-end input fastq files must be gziped and named as <sample id>[_sample lib][_name mod][_batch number]_R<1|2>.fastq.gz"
 	>&2 printf "%s\n" "Single-end input fastq files must be gziped and named as <sample id>[_sample lib][_name mod][_batch number]*.fastq.gz"
@@ -94,6 +96,9 @@ while [[ $# -gt 1 ]]; do
 		  ;;
 		--only_paired)
 		  ONLY_PAIRED=1
+		  ;;
+		--skip_dup_marking)
+		  SKIP_DUP_MARK=1
 		  ;;
 		*)
 		>&2 echo "Error: Unknown argument $1"
@@ -263,8 +268,6 @@ else
 	printf "\nSingle batch, no merging necessary.\n"
 fi
 
-printf "\n--SORTING AND MARKING DUPLICATES--\n"
-
 # The following pipe
 # 1) Adds ms (mate score) tag for duplicate marking (bwa output should already be grouped by read name)
 # 2) sorts the bam
@@ -273,8 +276,17 @@ printf "\n--SORTING AND MARKING DUPLICATES--\n"
 DIVTHREAD=$(perl -e '$thread = <>; print int($thread/3)' <<< "$NTHREAD")
 OUTBAM2="${OUTFULL}_untrimmed.bam"
 
-POSTMAP_CMD="samtools fixmate -m -@ $DIVTHREAD -u ${OUTFULL}_raw.bam - | samtools sort -u -@ $DIVTHREAD | samtools markdup -s -S -O BAM -@ $DIVTHREAD - ${OUTBAM2}"
+POSTMAP_MSG="SORTING"
+POSTMAP_CMD="samtools fixmate -m -@ $DIVTHREAD -u ${OUTFULL}_raw.bam - | samtools sort -@ $DIVTHREAD"
+if [[ "$SKIP_MARK_DUP" -eq 1 ]]; then
+	POSTMAP_CMD+=" -O BAM -o ${OUTBAM2}"
+	POSTMAP_MSG+=" READS"
+else
+	POSTMAP_CMD+=" -u | samtools markdup -s -S -O BAM -@ $DIVTHREAD - ${OUTBAM2}"
+	POSTMAP_MSG+=" AND MARKING DUPLICATE READS"
+fi
 
+printf "\n--%s--\n" "$POSTMAP_MSG"
 printf "\n%s\n\n" "$POSTMAP_CMD"
 
 eval $POSTMAP_CMD
