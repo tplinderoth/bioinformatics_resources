@@ -13,6 +13,7 @@ OUTDIR=''
 OUTPREFIX=''
 PLATFORM=''
 DATADS=''
+BARCODE=''
 BWAOPT=''
 SINGLE=0
 EXCLUDE_UNMAPPED=0
@@ -33,6 +34,7 @@ then
 	>&2 printf "%s\n" "--name_mod    STRING   Extra text in fastq file names"
 	>&2 printf "%s\n" "--platform    STRING   Sequencing platform, e.g. Illumina, Aviti"
 	>&2 printf "%s\n" "--ds          STRING   Data description contained in single or double quotes, e.g. 'Florida Scrub-Jay whole genome sequencing data'"
+	>&2 printf "%s\n" "--barcode     STRING   Index sequence for the sample. Supplying this overrides automatic barcode detection (see below for details)."
 	>&2 printf "%s\n" "--single               Evoke to indicate that data are single-end."
 	>&2 printf "%s\n" "--outprefix   STRING   Output bam file will be outdir/outprefix_untrimmed.bam. Default bam name is sample_id along with sample_lib and name_mod information if provided."
 	>&2 printf "%s [%i]\n" "--threads     INT      Number of threads" $NTHREAD
@@ -45,7 +47,9 @@ then
 	>&2 printf "%s\n" "Single-end input fastq files must be gziped and named as <sample id>[_sample lib][_name mod][_batch number]*.fastq.gz"
 	>&2 printf "%s\n" "<> = required, [] = optional (notice that underscores separate optional strings)"
 	>&2 printf "%s\n" "R1 = forward reads, R2 = reverse reads"
-	>&2 printf "\n%s\n" "All batches for a sample contained in the input fastq directory will be mapped."
+	>&2 printf "\n%s\n" "All batches for a sample contained in the input fastq directory will be mapped.
+If batches for a sample use different barcodes, do not use the --barcodes argument,
+otherwise that barcode will be used for all batches. Instead, use automatic barcode detection."
 	>&2 printf "\n%s\n" "Currently this script only supports reads with headers that are in the Casava 1.8 format."
 	>&2 printf "\nversion %s\n" $VERSION
 	exit
@@ -69,6 +73,9 @@ while [[ $# -gt 1 ]]; do
 		  shift;;
 		--ds)
 		  DATADS="$2"
+		  shift;;
+		--barcode)
+		  BARCODE="$2"
 		  shift;;
 		--outdir)
 		  OUTDIR="$2"
@@ -204,6 +211,7 @@ do
 	readgroup=''
 	nmatch=0
 	lstart=-3
+	endcheck=0
 
 	# need to check multiple headers to make sure sample barcodes converge (i.e. no sequencing error)
 	while [ $nmatch -lt 10 ]
@@ -212,10 +220,14 @@ do
 		lend=$((lstart + 1))
 		readheader=$(zcat "$FWDFQ" | sed -n "${lstart}p;${lend}q" | sed 's/ [[:digit:]]//')
 		readinfo=($(echo "$readheader" | perl -e 'chomp($read = <>); @arr = split(/:/,$read); print "@arr[1,2,3,$#arr]";'))
-		barcode=$(sed 's/+/-/' <<< "${readinfo[3]}")
-		readgroup="@RG\tID:${readinfo[0]}.${readinfo[1]}.${readinfo[2]}\tBC:${barcode}\tPU:${readinfo[1]}.${readinfo[2]}\tSM:${SAMPLE_ID}"
-
-		if [ "$readgroup" = "$prevrg" ] && ! [[ "$barcode" =~ 'N' ]]; then ((nmatch++)); fi
+		if [ -z "$BARCODE" ]; then
+			BARCODE=$(sed 's/+/-/' <<< "${readinfo[3]}")
+		else
+			endcheck=1
+		fi
+		readgroup="@RG\tID:${readinfo[0]}.${readinfo[1]}.${readinfo[2]}\tBC:${BARCODE}\tPU:${readinfo[1]}.${readinfo[2]}\tSM:${SAMPLE_ID}"
+		if [[ "$endcheck" -eq 1 ]]; then break; fi
+		if [ "$readgroup" = "$prevrg" ] && ! [[ "$BARCODE" =~ 'N' ]]; then ((nmatch++)); fi
 		prevrg="$readgroup"
 	done
 	if [ ! -z "$SAMPLE_LIB" ]; then readgroup+="\tLB:${SAMPLE_LIB}"; fi
