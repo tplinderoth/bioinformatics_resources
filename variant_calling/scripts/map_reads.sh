@@ -278,7 +278,7 @@ OUTBAM2="${OUTFULL}_untrimmed.bam"
 
 POSTMAP_MSG="SORTING"
 POSTMAP_CMD="samtools fixmate -m -@ $DIVTHREAD -u ${OUTFULL}_raw.bam - | samtools sort -@ $DIVTHREAD"
-if [[ "$SKIP_MARK_DUP" -eq 1 ]]; then
+if [[ "$SKIP_DUP_MARK" -eq 1 ]]; then
 	POSTMAP_CMD+=" -O BAM -o ${OUTBAM2}"
 	POSTMAP_MSG+=" READS"
 else
