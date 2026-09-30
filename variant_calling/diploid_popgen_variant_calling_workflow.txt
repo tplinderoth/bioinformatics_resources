@@ -675,7 +675,7 @@ printf "chr\tpos\tdepth\taverage_baseq\trms_baseq\tfraction_baseq0\taverage_mapq
 
 while read -r SCAF
 do
-        CMD="$EXEC -A -d 1000000 -f $REF -q 0 -Q 0 -r $SCAF --ff UNMAP,SECONDARY,QCFAIL,DUP -s -aa $BAM | tail -n+2 >> $OUTFILE"
+        CMD="$EXEC -A -d 1000000 -f $REF -q 0 -Q 0 -r $SCAF --ff UNMAP,SECONDARY,QCFAIL,DUP -a $BAM | tail -n+2 >> $OUTFILE"
         printf "\n%s\n\n" "$CMD"
         eval $CMD
         wait
