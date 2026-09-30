@@ -626,10 +626,11 @@ when using a subset of only the high-quality reads for genotyping. Therefore, in
 in the BAM files to generate genomic accessability masks.
 
 
-## (6a) Combine all bams into a single bam file for input into bamstats.
+## (6a) Combine all bams into a single bam file for input into bamstats (optional).
 
-This is necessary because bamstats can only take a single bam file as input (it was originally written 
-for cases involving many samples to the point that I/O operations become very slow).
+As of version 1.1.0 bamstats can now parse multiple bams at once using the `-b` option to supply a list of bam files,
+therefore, combining BAMs into a single BAM is no longer necessary. If one is analyzing many BAMs (thousands) at a time,
+running bamstats on a single, combined BAM can improve the speed of I/O operations.
 
 $ sbach /mnt/research/Fitz_Lab/projects/atelopus/atelopus_wgs/variants/mask/scripts/merge_atelopus_qc_bams.sh
 bash code:
