@@ -11,7 +11,7 @@ use IO::Zlib;
 use List::MoreUtils qw(uniq);
 #use warnings FATAL => 'all';
 
-my $version = '1.4.0'; # added more supported bed flags and fixed a FILTER overwrite bug 
+my $version = '1.4.1'; # added HighMiss FILTER tag for flagging sites with excessively high numbers of missing genotypes
 my $alfile = undef;
 my $alfields = undef;
 my $anctype = 'parsimony';
@@ -27,6 +27,7 @@ my $overwrite;
 my $dohet = undef;
 my $maxpoly = undef;
 my $mingq = 0;
+my $mingeno = undef;
 my $devsnp = undef; # ngsParalog calcLR output file
 my $devsnp_maxlr = undef; # maximum ngsParalog calcLR LR
 my $anno = undef; # file with custom annotations
@@ -34,13 +35,15 @@ my $anno = undef; # file with custom annotations
 my %default_flags = (
 'REPGQ' => "Number of individuals from different classes that are genotyped with a minimum degree of confidence",
 'REPDP' => "Number of genotyped individuals from different classes with a minimum DP",
-'HET' => "Proportion of heterozygous individuals",
+'HET' => "Proportion of heterozygous samples",
+'NS' => "Number of genotyped samples",
 'DEVLRT' => "Likelihood ratio test statistic from ngsParalog test of a deviant variant",
 'LowDP' => "Excessively low total site DP",
 'HighDP' => "Excessively high total site DP",
 'NoCov' => "No mapped reads",
 'LowCov' => "Excessively low total site depth",
 'ExcessCov' => "Excessively high total site depth",
+'HighMiss' => "Excessive number of missing genotypes",
 'HighHet' => "Low p-value for test of excess heterozygosity",
 'LowMQ' => "Low average mapping quality",
 'ExcessMQ0' => "Excessively high proportion of reads with mapping quality of zero",
@@ -66,6 +69,7 @@ cat <vcf file> | annotate_vcf.pl [options]
 --bed        Bed format file with FILTER annotations to add in the 4th column, see --flags 'default' for accepted flags
 --bedlist    ','-delimited list of FILTER annotations to ignore from bed
 --overwrite  Replace all existing filters, otherwise new filters are appended
+--mingeno    Minimum number of genotyped individuals, triggers FILTER\/HighMiss and adds\/updates INFO\/NS flags.
 --genorep    File of sample subset indexes for appending genotype representation to the INFO field, triggers REPGQ, REP flags
 --dohet      Calculate proportion of heterozygous genotypes, adds INFO\/HET
 --mingq      Minimum genotype quality when counting genotypes [$mingq]
@@ -99,12 +103,12 @@ Notes:
 
 GetOptions('alfile=s' => \$alfile, 'alfields=s' => \$alfields, 'dpbounds=s' => \$dpbounds, 'hetbound=f' => \$hetbound, 'rmfilter=s' => \$rmfilter, 
 'anctype=s' => \$anctype, 'bed=s' => \$bed, 'bedlist=s' => \$bedlist, 'overwrite' => \$overwrite, 'genorep=s' => \$genorep, 'dohet' => \$dohet, 
-'mingq=i' => \$mingq, 'maxpoly=f' => \$maxpoly, 'devlr_file=s' => \$devsnp, 'max_devlr=f' => \$devsnp_maxlr, 'anno=s' => \$anno);
+'mingq=i' => \$mingq, 'maxpoly=f' => \$maxpoly, 'devlr_file=s' => \$devsnp, 'max_devlr=f' => \$devsnp_maxlr, 'mingeno=i' => \$mingeno, 'anno=s' => \$anno);
 
 # this is for printing the command to the VCF header
 my %userargs = ('--anno' => $anno, '--alfile' => $alfile, '--alfields' => $alfields, '--dpbounds' => $dpbounds, '--hetbound' => $hetbound, '--rmfilter' => $rmfilter, 
 '--anctype' => $anctype, '--bed' => $bed, '--bedlist' => $bedlist, '--overwrite' => $overwrite, '--genorep' => $genorep, '--dohet' => $dohet, '--mingq' => $mingq, 
-'--maxpoly' => $maxpoly, '--devlr_file' => $devsnp, '--max_devlr' => $devsnp_maxlr);
+'--maxpoly' => $maxpoly, '--devlr_file' => $devsnp, '--max_devlr' => $devsnp_maxlr, '--mingeno' => $mingeno);
 # disable printing commands if not applicable
 $userargs{"--anctype"} = undef if (!$alfile);
 $userargs{"--bedlist"} = undef if (!$bedlist);
@@ -124,12 +128,14 @@ Each row in the --anno file is a different flag. Do not enclose descriptions in 
 INFO annotations:
 REPGQ  \"$default_flags{REPGQ}\" \(--genorep\)
 REPDP  \"$default_flags{REPDP}\" \(--genorep\)
+NS     \"$default_flags{NS}\" \(--mingeno\)
 HET    \"$default_flags{HET}\" \(--dohet\)
 DEVLRT \"$default_flags{DEVLRT}\" (--devlr_file)
 
 FILTER annotations:
 LowDP      \"$default_flags{LowDP}\" \(--bed or --dpbounds*\)
 HighDP     \"$default_flags{HighDP}\" \(--bed or --dpbounds*\)
+HighMiss   \"$default_flags{HighMiss}" \(--bed or --mingeno*)
 HighHet    \"$default_flags{HighHet}\" \(--bed or --hetbound*\)
 Poly       \"$default_flags{Poly}\" \(--bed or --maxpoly*\)
 DeviantVar \"$default_flags{DeviantVar}\" \(--bed or --max_devlr*\)
@@ -144,6 +150,8 @@ ExcessBQ0  \"$default_flags{ExcessBQ0}\" \(--bed\)
 
 # check arguments
 die("Error: --mingq $mingq invalid\n") if ($mingq < 0);
+
+my $count_geno = ($dohet || defined $mingeno) ? 1 : 0;
 
 # read in annotation file
 if ($anno) {
@@ -272,9 +280,16 @@ if ($dpbounds) {
 	$delfilter{LowDP} = 1;
 }
 
+if (defined $mingeno) {
+        die("--mingeno $mingeno is invalid. This option takes an integer >= 0.\n") if ($mingeno < 0);
+	$default_flags{HighMiss} .= " (fewer than $mingeno genotyped samples)";
+	$delfilter{HighMiss} = 1;
+}
+
+
 if ($hetbound) {
-	die ("--hetbound outside [0,1] interval\n") if ($hetbound < 0 || $hetbound > 1);
-	$default_flags{HighHet} .= " (less than $hetbound)";
+	die("--hetbound outside [0,1] interval\n") if ($hetbound < 0 || $hetbound > 1);
+	$default_flags{HighHet} .= " (p-value less than $hetbound)";
 	$delfilter{HighHet} = 1;
 }
 
@@ -291,7 +306,7 @@ if (defined $maxpoly && ($maxpoly < 0 || $maxpoly > 1)) {
 }
 
 my %bedflags = (LowCov => 1, ExcessCov => 1, LowMQ => 1, ExcessMQ0 => 1, NoCov => 1, LowBQ => 1, ExcessBQ0 => 1, LowDP => 1, HighDP => 1,
-HighHet => 1, Poly => 1, DeviantVar => 1);
+HighMiss => 1, HighHet => 1, Poly => 1, DeviantVar => 1);
 my %bedfilter;
 
 my %bedidx;
@@ -338,6 +353,10 @@ if ($bed) {
 			print STDERR "Error: cannot use --maxpoly if also supplying \"Poly\" flag with a bed file\n";
 			$conflict = 1;
 		}
+		if ($_ eq "HighMiss" && $mingeno) {
+			print STDERR "Error: cannot use --mingeno if also supplying \"HighMiss\" flag with a bed file\n";
+			$conflict = 1;
+		}
 		die("Recommend supplying --bedlist to ignore conflicting flags in the bed file\n") if $conflict;
 		$delfilter{$_} = 1;
 	}
@@ -369,12 +388,13 @@ if ($genorep) {
 	$grp_gq_string = "##INFO=<ID=REPGQ,Number=" . scalar(@grpid) . ",Type=Integer,Description=\"$default_flags{REPGQ}\">\n";
 	$grp_dp_string = "##INFO=<ID=REPDP,Number=" . scalar(@grpid) . ",Type=Integer,Description=\"$default_flags{REPDP}\">\n";
 }
+my $ns_string = "##INFO=<ID=NS,Number=1,Type=Integer,Description=\"$default_flags{NS}\">\n";
 my $het_string="##INFO=<ID=HET,Number=1,Type=Float,Description=\"$default_flags{HET}\">\n";
 my $vt_string = "##INFO=<ID=VT,Number=.,Type=String,Description=\"Variant type\">\n";
 my $devvar_lrt_string="##INFO=<ID=DEVLRT,Number=1,Type=Float,Description=\"$default_flags{DEVLRT}\">\n";
-
 my $lowdp_string = "##FILTER=<ID=LowDP,Description=\"$default_flags{LowDP}\">\n";
 my $highdp_string = "##FILTER=<ID=HighDP,Description=\"$default_flags{HighDP}\">\n";
+my $highmiss_string = "##FILTER=<ID=HighMiss,Description=\"$default_flags{HighMiss}\">\n";
 my $highhet_string = "##FILTER=<ID=HighHet,Description=\"$default_flags{HighHet}\">\n";
 my $poly_string = "##FILTER=<ID=Poly,Description=\"$default_flags{Poly}\">\n";
 my $lowcov_string = "##FILTER=<ID=LowCov,Description=\"$default_flags{LowCov}\">\n";
@@ -390,7 +410,7 @@ my @headorder = ('fileformat', 'reference', 'contig', 'INFO', 'FILTER', 'FORMAT'
 
 my %header = (fileformat => undef, ALT => undef, FILTER => undef, INFO => undef, FORMAT => undef, reference => undef, contig => undef, other => undef);
 
-my %seen = (aa => 0, lowdp => 0, highdp => 0, highhet => 0, het => 0, poly => 0, repgq => 0, repdp => 0, vt => 0, devlrt => 0, devfilter => 0);
+my %seen = (aa => 0, lowdp => 0, highdp => 0, highhet => 0, het => 0, poly => 0, repgq => 0, repdp => 0, vt => 0, devlrt => 0, devfilter => 0, highmiss => 0);
 
 my $hline;
 my $filter;
@@ -402,50 +422,58 @@ while (($hline = <$vcffh>) =~ /^##/) {
 			next if exists $delfilter{$1}
 		}
 
-		if ($alfile && $hline =~ /INFO=<ID=AA/) {
+		if ($alfile && $hline =~ /INFO=<ID=AA,/) {
 			# update AA annotation to ensure it is correct
 			push @{$header{$annotation}}, $aa_string;
 			++$seen{aa};
-		} elsif ($genorep && $hline =~ /INFO=<ID=REPGQ>/) {
+		} elsif ($genorep && $hline =~ /INFO=<ID=REPGQ,/) {
 			# update REPGQ annotation
 			push @{$header{$annotation}}, $grp_gq_string;
 			++$seen{repgq};
-		} elsif ($genorep && $hline =~ /INFO=<ID=REPDP>/) {
+		} elsif ($genorep && $hline =~ /INFO=<ID=REPDP,/) {
 			# update REPDP annotation
 			push @{$header{$annotation}}, $grp_dp_string;
 			++$seen{repdp};
-		} elsif ($dohet && $hline =~ /INFO=<ID=HET>/) {
+		} elsif ($dohet && $hline =~ /INFO=<ID=HET,/) {
 			# update HET annotation
 			push @{$header{$annotation}}, $het_string;
 			++$seen{het};
-		} elsif ($devsnp && $hline =~ /INFO=<ID=DEVLRT>/) {
+		} elsif ($devsnp && $hline =~ /INFO=<ID=DEVLRT,/) {
 			# update DEVLRT annotation
 			push @{$header{$annotation}}, $devvar_lrt_string;
 			++$seen{devlrt};
-		} elsif ($hline =~ /INFO=<ID=VT>/) {
+		} elsif ($hline =~ /INFO=<ID=VT,>/) {
 			# update VT annotation
 			push @{$header{$annotation}}, $vt_string;
 			++$seen{vt};
-		} elsif ($dpbounds && $hline =~ /FILTER=<ID=LowDP/) {
+		} elsif ($dpbounds && $hline =~ /FILTER=<ID=LowDP,/) {
 			# update LowDP annotation
 			push @{$header{$annotation}}, $lowdp_string;
 			++$seen{lowdp};
-		} elsif ($dpbounds && $hline =~ /FILTER=<ID=HighDP/) {
+		} elsif ($dpbounds && $hline =~ /FILTER=<ID=HighDP,/) {
 			# update HighDP annotation
 			push @{$header{$annotation}}, $highdp_string;
 			++$seen{highdp};
-		} elsif ($hetbound && $hline =~ /FILTER=<ID=HighHet>/) {
+		} elsif ($hetbound && $hline =~ /FILTER=<ID=HighHet,/) {
 			# update HighHet annotation
 			push @{$header{$annotation}}, $highhet_string;
 			++$seen{highhet};
-		} elsif ($devsnp_maxlr && $hline =~ /FILTER=<ID=DeviantVar>/) {
+		} elsif ($devsnp_maxlr && $hline =~ /FILTER=<ID=DeviantVar,/) {
 			# update DeviantVar annotation
 			push @{$header{$annotation}}, $devvar_string;
 			++$seen{devfilter};
-		} elsif (defined $maxpoly && $hline =~ /FILTER=<ID=Poly>/) {
+		} elsif (defined $maxpoly && $hline =~ /FILTER=<ID=Poly,/) {
 			# update max number of polymorphic samples string
 			push @{$header{$annotation}}, $poly_string;
 			++$seen{poly}
+		} elsif (defined $mingeno && ($hline =~ /FILTER=<ID=HighMiss,/ || $hline =~ /INFO=<ID=NS,/)) {
+			# update FILTER/HighMiss and INFO/NS
+			push @{$header{$annotation}}, $ns_string if $hline =~ /INFO=<ID=NS,/; # ensures NS is defined by this script
+			if ($hline =~ /FILTER=<ID=HighMiss,/) {
+				push @{$header{$annotation}}, $highmiss_string;
+				++$seen{highmiss};
+			}
+			
 		} elsif ($annotation =~ /^fileformat|ALT|FILTER|INFO|FORMAT|reference|contig/) {
 			push @{$header{$annotation}}, $hline;
 		} else {
@@ -462,6 +490,7 @@ push @{$header{INFO}}, $vt_string if (!$seen{vt});
 push @{$header{INFO}}, $devvar_lrt_string if ($devsnp && !$seen{devlrt});
 push @{$header{FILTER}}, $lowdp_string if (($dpbounds || $bedfilter{LowDP}) && !$seen{lowdp});
 push @{$header{FILTER}}, $highdp_string if (($dpbounds || $bedfilter{HighDP}) && !$seen{highdp});
+push @{$header{FILTER}}, $highmiss_string if (defined $mingeno && !$seen{highmiss});
 push @{$header{FILTER}}, $highhet_string if (($hetbound || $bedfilter{HighHet}) && !$seen{highhet});
 push @{$header{FILTER}}, $devvar_string if (($devsnp_maxlr || $bedfilter{DeviantVar}) && !$seen{devfilter});
 push @{$header{FILTER}}, $poly_string if ((defined $maxpoly || $bedfilter{Poly}) && !$seen{poly});
@@ -888,9 +917,9 @@ while (<$vcffh>) {
 		$tok[7] =~ s/;$//;
 	}
 
-	## heterozygote frequency
-	if ($dohet && $tok[4] ne ".") {
-		my ($ngt, $nhet) = (0,0);
+	## genotype counting and heterozygote frequency
+	my ($ngt, $nhet) = (0,0);
+	if ($count_geno) {
 		for (my $i = 9; $i <= $#tok; $i++) {
 			my @indarr = split(':',$tok[$i]);
 			if ($indarr[$gtidx] =~ /\./) {
@@ -905,9 +934,11 @@ while (<$vcffh>) {
 			}
 
 		}
-		my $h = ($ngt == 0) ? '.' : $nhet/$ngt;
-		$h = sprintf("%.7f",$h) if ($h ne '.' && $h != 0);
-		addInfo(\$tok[7], "HET=", \"HET=${h}");
+		if ($dohet && $tok[4] ne ".") {
+			my $h = ($ngt == 0) ? '.' : $nhet/$ngt;
+			$h = sprintf("%.7f",$h) if ($h ne '.' && $h != 0);
+			addInfo(\$tok[7], "HET=", \"HET=${h}");
+		}
 	}
 
 	## ngsParalog INFO annotation
@@ -930,7 +961,7 @@ while (<$vcffh>) {
 	}
 
 	## apply filters
-	if ($dpbounds || $hetbound || $bed) {
+	if ($dpbounds || $hetbound || $bed || defined $mingeno) {
 		my @filter_annotations;
 	
 		# coverage filters
@@ -969,6 +1000,17 @@ while (<$vcffh>) {
 		if (defined $devsnp_maxlr && $tok[7] =~ /DEVLRT=([^;]+)/) {
 			my $lrtval=$1;
 			push @filter_annotations, "DeviantVar" if ($lrtval =~ /^\d/ && $lrtval > $devsnp_maxlr);
+		}
+
+		# excess missing genotypes filter
+		if (defined $mingeno) {
+			push @filter_annotations, "HighMiss" if ($ngt < $mingeno);
+			# update INFO/NS
+			if ($tok[7] =~ /(?:^|;)NS=\d+/) {
+				$tok[7] =~ s/(;?)NS=\d+/${1}NS=$ngt/;
+			} else {
+				$tok[7] .= ($tok[7]) ? ";NS=${ngt}" : "NS=${ngt}";
+			}
 		}
 
 		# bed filters
@@ -1088,7 +1130,7 @@ sub checkBed {
 	while (my $line = readline($$fh)) {
 		chomp($line);
 		my @tok = split(/\s+/, $line);
-		foreach my $f ($tok[3]) {
+		foreach my $f (split(/;/,$tok[3])) {
 			if (exists $$accept{$f}) {
 				$$flags{$f} = 1;
 			} else {
