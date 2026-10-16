@@ -119,8 +119,7 @@ $userargs{"--anno"} = undef if (!$anno);
 
 die(qq/
 Optional VCF annotation flags, the default descriptions, and the argument that triggers the flag for inclusion.
---bed FILTER flag header lines are only added or updated for flags found in the bed file. Arguments marked with
-\"*\" in the default descriptions below will incorporate the user-supplied cutoff values into the default headers.
+--bed FILTER flag header lines are only added or updated for flags found in the bed file.
 
 To change the default descriptions provide a tab-delimited file to --anno with columns [1] flag ID \(case sensitive\), [2] description \(should not contain tabs\).
 Each row in the --anno file is a different flag. Do not enclose descriptions in double quotes.
@@ -133,12 +132,12 @@ HET    \"$default_flags{HET}\" \(--dohet\)
 DEVLRT \"$default_flags{DEVLRT}\" (--devlr_file)
 
 FILTER annotations:
-LowDP      \"$default_flags{LowDP}\" \(--bed or --dpbounds*\)
-HighDP     \"$default_flags{HighDP}\" \(--bed or --dpbounds*\)
-HighMiss   \"$default_flags{HighMiss}" \(--bed or --mingeno*)
-HighHet    \"$default_flags{HighHet}\" \(--bed or --hetbound*\)
-Poly       \"$default_flags{Poly}\" \(--bed or --maxpoly*\)
-DeviantVar \"$default_flags{DeviantVar}\" \(--bed or --max_devlr*\)
+LowDP      \"$default_flags{LowDP}\" \(--bed or --dpbounds\)
+HighDP     \"$default_flags{HighDP}\" \(--bed or --dpbounds\)
+HighMiss   \"$default_flags{HighMiss}" \(--bed or --mingeno)
+HighHet    \"$default_flags{HighHet}\" \(--bed or --hetbound\)
+Poly       \"$default_flags{Poly}\" \(--bed or --maxpoly\)
+DeviantVar \"$default_flags{DeviantVar}\" \(--bed or --max_devlr\)
 NoCov      \"$default_flags{NoCov}\" \(--bed\)
 LowCov     \"$default_flags{LowCov}\" \(--bed\)
 ExcessCov  \"$default_flags{ExcessCov}\" \(--bed\)
@@ -272,9 +271,6 @@ if ($dpbounds) {
 	} elsif ($dpcutoff[0] >= $dpcutoff[1]) {
 		die("ERROR: --dpbounds upper bound must be greater than the lower bound value\n");
 	}
-
-	$default_flags{LowDP} .= " (less than $dpcutoff[0]X)";
-	$default_flags{HighDP}.= " (greater than $dpcutoff[1]X)";
 	
 	$delfilter{HighDP} = 1;
 	$delfilter{LowDP} = 1;
@@ -282,26 +278,22 @@ if ($dpbounds) {
 
 if (defined $mingeno) {
         die("--mingeno $mingeno is invalid. This option takes an integer >= 0.\n") if ($mingeno < 0);
-	$default_flags{HighMiss} .= " (fewer than $mingeno genotyped samples)";
 	$delfilter{HighMiss} = 1;
 }
 
 
 if ($hetbound) {
 	die("--hetbound outside [0,1] interval\n") if ($hetbound < 0 || $hetbound > 1);
-	$default_flags{HighHet} .= " (p-value less than $hetbound)";
 	$delfilter{HighHet} = 1;
 }
 
 if ($devsnp_maxlr) {
 	die("--max_devlr must be >= 0\n") if ($devsnp_maxlr < 0);
-	$default_flags{DeviantVar} .= " (value greater than $devsnp_maxlr)";
 	$delfilter{DeviantVar} = 1;
 }
 
 if (defined $maxpoly && ($maxpoly < 0 || $maxpoly > 1)) {
 	die("Error: --maxpoly out of range [0,1]\n");
-	$default_flags{Poly} .= " (greater than maxpoly)";
 	$delfilter{Poly} = 1;
 }
 
